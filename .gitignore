@@ -1,0 +1,7 @@
+.idea/
+.ipynb_checkpoints/
+.spyproject/
+__pycache__/
+doc/
+PowerBI/
+image/
