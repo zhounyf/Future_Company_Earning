@@ -3,5 +3,6 @@
 .spyproject/
 __pycache__/
 doc/
+ProPackage/ProConfig.py
 PowerBI/
 image/
