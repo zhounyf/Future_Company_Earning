@@ -3,6 +3,7 @@
 
 import MySQLdb
 
+
 class ProMySqlDB(object):
     """
     MySQL数据库类

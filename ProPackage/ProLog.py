@@ -9,8 +9,6 @@ import os
 from datetime import datetime
 
 
-# from ProConfig import earningLogFlieName,earningLogName
-
 class ProLog():
     def __init__(self, logName, fileName='./log/', bufferNumber=10):
         self.__logName = logName
