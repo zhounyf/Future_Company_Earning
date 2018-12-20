@@ -2,6 +2,7 @@ from ProPackage.LangMySQL import *
 from ProPackage.ProConfig import *
 from ProPackage.ProMySqlDB import ProMySqlDB
 from ProPackage.ProTool import *
+import os
 
 
 def MakeCompanyOITableList(mySqlDB, company, start, end, proLog=None, isLog=False):
@@ -26,7 +27,7 @@ def MakeCompanyOITableList(mySqlDB, company, start, end, proLog=None, isLog=Fals
         ans = ans.rename(columns={0: '合约代码'})
         ans = ans.where(pd.notnull(ans), None)
     except ValueError:
-        if (isLog and proLog != None):
+        if isLog and proLog is not None:
             proLog.Log("%s  期间未没有期货持仓排名\n" % company, True)
             proLog.Close()
         pass
@@ -38,10 +39,11 @@ def MakeEarningTable(mySqlDB, mySqlDB2, contract, company, multipliertable):
     """
     从ContractList表中提取单合约单期货公司未填充null的持仓信息,之后结合texchangefutureday中价格信息，
     填充完整单合约历史持仓数据。
-    :param mySqlDB:
+    :param mySqlDB:localhost
+    :param mySqlDB2:reader
     :param contract:
     :param company:
-    :return:
+    :return:earningTable,其中当日盈亏为改期货公司净持仓与当日结算价计算
     """
     table = Mysql_GetSimpleCompanyList(mySqlDB, contract, company)
     pricetable = Mysql_GetOneContractPrice(mySqlDB2, contract)
@@ -81,9 +83,9 @@ def MakeEarningTable(mySqlDB, mySqlDB2, contract, company, multipliertable):
                          table['期货品种'][0]]).fillna(0)
     table['期货公司'] = company
     table['日期'] = table.index
-    return table[['合约代码', '日期', '交易所', '会员简称', '持买仓量', '持买增减量', \
-                  '持卖仓量', '持卖增减量', '合约持仓量', '期货品种', '开盘价', '最高价', '最低价', '收盘价', '当日结算价', '净持仓', '净持仓变动', '当日盈亏']]
-    return table
+    return table[['合约代码', '日期', '交易所', '会员简称', '持买仓量', '持买增减量',
+                  '持卖仓量', '持卖增减量', '合约持仓量', '期货品种', '开盘价', '最高价',
+                  '最低价', '收盘价', '当日结算价', '净持仓', '净持仓变动', '当日盈亏']]
 
 
 def TableToMysql(mySqlDB, table):
@@ -94,7 +96,41 @@ def TableToMysql(mySqlDB, table):
     :return:
     """
     values = frameToTuple(table)
-    MySql_BatchInsertComanpyListTest_Test(mySqlDBLocal, values)
+    # MySql_BatchInsertCompanylist(mySqlDBLocal, values)
+    MySql_BatchInsertEarningTable(mySqlDB, values)
+
+
+def MakeCompanyListTest(mySqlDB, mySqlDB2, companys, start, end):
+    """
+    批量将40家期货公司的数据导入mySqlDBLocal.CompanyListTest中
+    :param mySqlDB: mySqlDBLocal
+    """
+    for company in companys:
+        ans = runtimeR(MakeCompanyOITableList, mySqlDB, company, start, end)
+        runtime(TableToMysql, mySqlDB2, ans)
+        print(company + "has done!")
+
+
+def MakeEarningTables(mySqlDB, mySqlDB2, companys, multipliertable):
+    """
+    批量将40家期货公司以及2010年至今的所有期货合约生成的earningTable数据导入mySqlDBLocal.earningTable中
+    :param mySqlDB:mySqlDBLocal
+    :param mySqlDB2:mySqlDBReader
+    :param multipliertable:MultiplierTable
+    :return:T
+    """
+
+    contracts = runtimeR(Mysql_GetAllContractNames, mySqlDB, '2010-10-01')
+    print("All of the Contracts is %d" % (len(contracts)))
+    for company in companys:
+        for contract in contracts:
+            try:
+                ans = MakeEarningTable(mySqlDB, mySqlDB2, contract[0], company, multipliertable)
+                TableToMysql(mySqlDB, ans)
+                print("%s,%s has done!" % (company, contract[0]))
+            except (ValueError, KeyError):
+                print("%s,%s is wrong!" % (company, contract[0]))
+                pass
 
 
 if __name__ == '__main__':
@@ -103,12 +139,10 @@ if __name__ == '__main__':
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
 
-    company = '永安期货'
-    start = '2010-01-04'
-    end = '2018-10-30'
-    # ans = Mysql_GetSimpleCompanyList(mySqlDBLocal, 'CF1605', company)
-    ans = runtimeR(MakeCompanyOITableList, mySqlDBReader, company, start, end)
-    runtime(TableToMysql, mySqlDBLocal, ans)
+    # MakeCompanyListTest(mySqlDBReader, mySqlDBLocal, Companys, start, end)
+    MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable)
+
+
 
     mySqlDBReader.Close()
     mySqlDBLocal.Close()

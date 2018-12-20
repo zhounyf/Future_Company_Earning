@@ -18,7 +18,7 @@ def get_largedata():
 def CompanyOITableList(mySqlDB, company, start, end, proLog=None, isLog=False):
     """
     获取某期货公司一段时期内所有期货合约上的持仓情况。
-    :param mySqlDB:
+    :param mySqlDB:reader
     :param company:
     :param start:
     :param end:
@@ -49,7 +49,8 @@ def main():
                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
 
     # MySql_CreateTable_ComanpyList(mySqlDBLocal)
-    start = datetime.now()
+    # MySql_CreateTable_EarningTable(mySqlDBLocal)
+    # start = datetime.now()
     # table = Mysql_GetContractPrice(mySqlDBReader, '2016-01-06')
     # table = Mysql_GetCompanyOITable(mySqlDBReader, '永安期货', '2010-01-06')
     # table = MySql_GetDateLists(mySqlDBReader, '2010-01-01')
@@ -57,19 +58,19 @@ def main():
     # table.insert(0, 0, value=table.index.values)
     # table = table.rename(columns={0: '合约代码'})
     # table = table.where(pd.notnull(table), None)
-    end = datetime.now()
+    # end = datetime.now()
+    #
+    # print("读取时间 \n%s" % (end - start))
+    # print("转换时间")
+    # values = runtimeR(frameToTuple, table)
+    # print("存入时间")
+    # runtime(MySql_BatchInsertComanpyListTest_Test, mySqlDBLocal, values)
+    # print("行数： %d" % len(table))
+    #
+    # return table
 
-    print("读取时间 \n%s" % (end - start))
-    print("转换时间")
-    values = runtimeR(frameToTuple, table)
-    print("存入时间")
-    runtime(MySql_BatchInsertComanpyListTest_Test, mySqlDBLocal, values)
-    print("行数： %d" % len(table))
 
-    return table
-
-
-if __name__ == '__main__':
-    ans = runtimeR(main)
-    ans.insert(0, 0, value=ans.index.values)
-    print(ans)
+# if __name__ == '__main__':
+#     ans = runtimeR(main)
+#     # ans.insert(0, 0, value=ans.index.values)
+#     print(ans)

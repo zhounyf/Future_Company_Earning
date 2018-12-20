@@ -9,7 +9,7 @@ import re
 import os
 
 
-def MySql_CreateTable_ComanpyList(mySqlDB):
+def MySql_CreateTable_Companylist(mySqlDB):
     """
     创建“最终计算用的包含价格的期货持仓表” "测试用"
     :param mySqlDB:localhost
@@ -17,7 +17,7 @@ def MySql_CreateTable_ComanpyList(mySqlDB):
     """
     try:
         mySqlDB.Sql('''
-        CREATE TABLE `ComanpyListTest` (
+        CREATE TABLE `companylist` (
           `合约代码` varchar(8) DEFAULT NULL,
           `日期` date DEFAULT NULL,
           `交易所` varchar(8) DEFAULT NULL,
@@ -26,7 +26,6 @@ def MySql_CreateTable_ComanpyList(mySqlDB):
           `持买增减量` int(12) DEFAULT NULL,
           `持卖仓量` int(12) DEFAULT NULL,
           `持卖增减量` int(12) DEFAULT NULL,
-          # `合约持仓量` int(12) DEFAULT NULL,
           `期货品种` varchar(6) DEFAULT NULL
           # `开盘价` float DEFAULT NULL,
           # `最高价` float DEFAULT NULL,
@@ -43,7 +42,7 @@ def MySql_CreateTable_ComanpyList(mySqlDB):
         raise e
 
 
-def MySql_CreateTable_earningTableTest(mySqlDB):
+def MySql_CreateTable_EarningTable(mySqlDB):
     """
     创建“最终计算用的包含价格的期货持仓表” "测试用"
     :param mySqlDB:localhost
@@ -60,6 +59,7 @@ def MySql_CreateTable_earningTableTest(mySqlDB):
           `持买增减量` int(12) DEFAULT NULL,
           `持卖仓量` int(12) DEFAULT NULL,
           `持卖增减量` int(12) DEFAULT NULL,
+          `合约持仓量` int(12) DEFAULT NULL,
           `期货品种` varchar(6) DEFAULT NULL,
           `开盘价` float DEFAULT NULL,
           `最高价` float DEFAULT NULL,
@@ -68,7 +68,7 @@ def MySql_CreateTable_earningTableTest(mySqlDB):
           `当日结算价` float DEFAULT NULL,
           `净持仓` int(12) DEFAULT NULL,
           `净持仓变动` int(12) DEFAULT NULL,
-          `当日盈亏` float DEFAULT NULL,
+          `当日盈亏` float DEFAULT NULL
           # KEY `idx_earningtabletest_合约代码` (`合约代码`),
           # KEY `idx_earningtabletest_会员简称` (`会员简称`),
           # KEY `idx_earningtabletest_日期` (`日期`)
@@ -79,20 +79,40 @@ def MySql_CreateTable_earningTableTest(mySqlDB):
         raise e
 
 
-def MySql_BatchInsertComanpyListTest_Test(mySqlDB, values, proLog=None, isLog=False):
+def MySql_BatchInsertCompanylist(mySqlDB, values, proLog=None, isLog=False):
     '''
     将数据批量加入“期货公司单品种当日盈亏表”
     '''
     try:
-        if (len(values) > 0):
+        if len(values) > 0:
             mySqlDB.Sqls('''
-            insert into comanpylisttest(合约代码,日期,交易所,会员简称,持买仓量,持买增减量,持卖仓量,持卖增减量,
+            insert into companylist(合约代码,日期,交易所,会员简称,持买仓量,持买增减量,持卖仓量,持卖增减量,
             期货品种) 
             values (%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
             if (isLog and proLog != None):
                 proLog.Log('Table texchangefutureday BatchInsert %d Successfully ' % len(values))
         else:
             if (isLog and proLog != None):
+                proLog.Log('Table texchangefutureday BatchInsert Nothing')
+    except Exception as e:
+        raise e
+
+
+def MySql_BatchInsertEarningTable(mySqlDB, values, proLog=None, isLog=False):
+    '''
+    将数据批量加入“期货公司单品种当日盈亏表”
+    '''
+    try:
+        if len(values) > 0:
+            mySqlDB.Sqls('''
+            insert into earningtabletest(合约代码, 日期, 交易所, 会员简称, 持买仓量, 持买增减量,
+                  持卖仓量, 持卖增减量, 合约持仓量, 期货品种, 开盘价, 最高价,
+                  最低价, 收盘价, 当日结算价, 净持仓, 净持仓变动, 当日盈亏) 
+            values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
+            if isLog and proLog is not None:
+                proLog.Log('Table texchangefutureday BatchInsert %d Successfully ' % len(values))
+        else:
+            if isLog and proLog is not None:
                 proLog.Log('Table texchangefutureday BatchInsert Nothing')
     except Exception as e:
         raise e
@@ -158,15 +178,8 @@ def Mysql_GetCompanyOITable(mySqlDB, company, date, proLog=None, isLog=False):
         table = pd.merge(tablebuy, tablesell, how='outer', on=['日期', '交易所', '合约代码', '会员简称'])
         table['期货品种'] = table['合约代码'].apply(lambda x: ''.join(re.findall(r'[A-Za-z]', x)).upper())
         table.set_index('合约代码', inplace=True)
-        # pricetable = Mysql_GetContractPrice(mySqlDB, date)
-        # pricetable.set_index('合约代码', inplace=True)
-        # table['开盘价'] = pricetable['开盘价']
-        # table['最高价'] = pricetable['最高价']
-        # table['最低价'] = pricetable['最低价']
-        # table['收盘价'] = pricetable['收盘价']
-        # table['当日结算价'] = pricetable['当日结算价']
     except ValueError:
-        if (isLog and proLog != None):
+        if isLog and proLog is not None:
             proLog.Log("%s %s <get_company> is valueError\n" % (company, date))
     else:
         return table
@@ -179,7 +192,9 @@ def Mysql_GetOneContractPrice(mySqlDB, contract):
     :param contract:
     :return:
     """
-    sql = 'SELECT FRealContract,FOpen,FHigh,FLow,FClose,FSettle,FOpenInst,FDate FROM informationdb.texchangefutureday where  FRealContract =' + '"' + contract + '"' + 'order by FDate '
+    sql = 'SELECT FRealContract,FOpen,FHigh,FLow,FClose,FSettle,FOpenInst,' \
+          'FDate FROM informationdb.texchangefutureday where  ' \
+          'FRealContract =' + '"' + contract + '"' + 'order by FDate '
     results = mySqlDB.GetResults(sql)
     pricetable = pd.DataFrame(list(results))
     pricetable.columns = ['合约代码', '开盘价', '最高价', '最低价', '收盘价', '当日结算价', '持仓量', '日期']
@@ -188,14 +203,26 @@ def Mysql_GetOneContractPrice(mySqlDB, contract):
 
 def Mysql_GetSimpleCompanyList(mySqlDB, contract, company):
     """
-    获取comanpylist表中单合约单期货公司的原始持仓信息
+    获取companylist表中单合约单期货公司的原始持仓信息
     :param mySqlDB:localhost
     :param contract:
     :param company:
     :return:
     """
-    sql = 'select * from comanpylisttest where 合约代码 = "%s" and 会员简称 = "%s"' % (contract, company)
+    sql = 'select * from companylist where 合约代码 = "%s" and 会员简称 = "%s"' % (contract, company)
     results = mySqlDB.GetResults(sql)
     table = pd.DataFrame(list(results))
     table.columns = ['合约代码', '日期', '交易所', '会员简称', '持买仓量', '持买增减量', '持卖仓量', '持卖增减量', '期货品种']
     return table
+
+
+def Mysql_GetAllContractNames(mySqlDB, start):
+    """
+    从companylist中获得所有合约的名称
+    :param mySqlDB:
+    :param start:
+    :return:
+    """
+    sql = 'select distinct 合约代码 from companylist where 日期 >= "%s"' % start
+    results = mySqlDB.GetResults(sql)
+    return results
