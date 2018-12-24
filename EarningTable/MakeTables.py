@@ -117,7 +117,7 @@ def MakeEarningTables(mySqlDB, mySqlDB2, companys, multipliertable):
     :param mySqlDB:mySqlDBLocal
     :param mySqlDB2:mySqlDBReader
     :param multipliertable:MultiplierTable
-    :return:T
+    :return:ToMysql
     """
 
     contracts = runtimeR(Mysql_GetAllContractNames, mySqlDB, '2010-10-01')
@@ -133,16 +133,18 @@ def MakeEarningTables(mySqlDB, mySqlDB2, companys, multipliertable):
                 pass
 
 
-if __name__ == '__main__':
+
+
+
+# if __name__ == '__main__':
     mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
 
     # MakeCompanyListTest(mySqlDBReader, mySqlDBLocal, Companys, start, end)
-    MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable)
+    # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable)
 
 
-
-    mySqlDBReader.Close()
-    mySqlDBLocal.Close()
+    # mySqlDBReader.Close()
+    # mySqlDBLocal.Close()

@@ -9,7 +9,7 @@ class ProMySqlDB(object):
     MySQL数据库类
     """
 
-    def __init__(self, dbName, user, passwd, host='192.168.2.123', port=3306):
+    def __init__(self, dbName, user, passwd, host, port):
         try:
             self.dbName = str(dbName)
             self.user = str(user)

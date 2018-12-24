@@ -47,6 +47,7 @@ def main():
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
     mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    MySql_CreateTable_SeveralEarning(mySqlDBLocal)
 
     # MySql_CreateTable_ComanpyList(mySqlDBLocal)
     # MySql_CreateTable_EarningTable(mySqlDBLocal)
@@ -70,7 +71,7 @@ def main():
     # return table
 
 
-# if __name__ == '__main__':
-#     ans = runtimeR(main)
-#     # ans.insert(0, 0, value=ans.index.values)
-#     print(ans)
+if __name__ == '__main__':
+    ans = runtime(main)
+    # ans.insert(0, 0, value=ans.index.values)
+    print(ans)

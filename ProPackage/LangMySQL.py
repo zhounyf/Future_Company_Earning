@@ -13,10 +13,9 @@ def MySql_CreateTable_Companylist(mySqlDB):
     """
     创建“最终计算用的包含价格的期货持仓表” "测试用"
     :param mySqlDB:localhost
-    :return:
     """
     try:
-        mySqlDB.Sql('''
+        mySqlDB.Sql("""
         CREATE TABLE `companylist` (
           `合约代码` varchar(8) DEFAULT NULL,
           `日期` date DEFAULT NULL,
@@ -36,7 +35,7 @@ def MySql_CreateTable_Companylist(mySqlDB):
           # KEY `idx_earningtabletest_会员简称` (`会员简称`),
           # KEY `idx_earningtabletest_日期` (`日期`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-        ''')
+        """)
 
     except Exception as e:
         raise e
@@ -46,10 +45,9 @@ def MySql_CreateTable_EarningTable(mySqlDB):
     """
     创建“最终计算用的包含价格的期货持仓表” "测试用"
     :param mySqlDB:localhost
-    :return:
     """
     try:
-        mySqlDB.Sql('''
+        mySqlDB.Sql("""
         CREATE TABLE `earningtabletest` (
           `合约代码` varchar(8) DEFAULT NULL,
           `日期` date DEFAULT NULL,
@@ -73,16 +71,53 @@ def MySql_CreateTable_EarningTable(mySqlDB):
           # KEY `idx_earningtabletest_会员简称` (`会员简称`),
           # KEY `idx_earningtabletest_日期` (`日期`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
-        ''')
+        """)
 
     except Exception as e:
         raise e
 
 
+def MySql_CreateTable_SeveralEarning(mySqlDB):
+    """
+    创建“某一间隔天数的多头占比值对应的不同期货公司不同观察天数的盈亏情况” "测试用"
+    :param mySqlDB: localhost
+    :param interval:计算多头占比值的间隔天数
+    """
+    try:
+        mySqlDB.Sql("""
+        CREATE TABLE `sevaralearning` (
+        `观察天数` int(2) DEFAULT NULL,
+        `会员简称` varchar(8) DEFAULT NULL,
+        `合约代码` varchar(8) DEFAULT NULL,
+        `多头占比` float DEFAULT NULL,
+        `日期` date DEFAULT NULL,
+        `开盘价` float DEFAULT NULL,
+        `最高价` float DEFAULT NULL,
+        `最低价` float DEFAULT NULL,
+        `收盘价` float DEFAULT NULL,
+        `持买仓量` int(12) DEFAULT NULL,
+        `持买增减量` int(12) DEFAULT NULL,
+        `持买增减量sign`  int(2) DEFAULT NULL,
+        `合约持仓量` int(12) DEFAULT NULL,
+        `合约持仓变化量` int(12) DEFAULT NULL,
+        `交易盈亏` float DEFAULT NULL,
+        `累计持仓盈亏` float DEFAULT NULL,
+        `总盈亏` float DEFAULT NULL
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci 
+        """)
+
+    except Exception as e:
+        raise e
+
+
+
+
 def MySql_BatchInsertCompanylist(mySqlDB, values, proLog=None, isLog=False):
-    '''
+    """
     将数据批量加入“期货公司单品种当日盈亏表”
-    '''
+    :param mySqlDB: localhost
+    :param values: np.ndarray
+    """
     try:
         if len(values) > 0:
             mySqlDB.Sqls('''
@@ -226,3 +261,62 @@ def Mysql_GetAllContractNames(mySqlDB, start):
     sql = 'select distinct 合约代码 from companylist where 日期 >= "%s"' % start
     results = mySqlDB.GetResults(sql)
     return results
+
+
+def Mysql_GetColumnData(mySqlDB, columns, company, contract, start, end):
+    """
+    提取
+    :param mySqlDB:
+    :param columns:
+    :param company:
+    :param contract:
+    :return:
+    """
+    sql = 'select 日期,%s from earningtabletest where 会员简称 = "%s" and 合约代码 = "%s" and ' \
+          '日期 >= "%s" and 日期 <= "%s"' % (columns, company, contract, start, end)
+    results = mySqlDB.GetResults(sql)
+    if len(results) > 0:
+        table = pd.DataFrame(list(results))
+        table.columns = ['日期', company]
+        table.index = pd.to_datetime(table['日期'])
+        del table['日期']
+        return table
+
+
+def MySql_GetContractData_Earning(mySqlDB, contract):
+    """
+    从earningtabledb.earningtabletest中提取单合约详细信息
+    :param mySqlDB:
+    :param contract:
+    :return:
+    """
+    sql = 'SELECT * FROM earningtabletest where  合约代码 = "%s" ' % contract
+    results = mySqlDB.GetResults(sql)
+    table = pd.DataFrame(list(results))
+    table.columns = ['合约代码', '日期', '交易所', '会员简称', '持买仓量', '持买增减量',
+                     '持卖仓量', '持卖增减量', '合约持仓量', '期货品种', '开盘价', '最高价',
+                     '最低价', '收盘价', '当日结算价', '净持仓', '净持仓变动', '当日盈亏']
+    return table
+
+
+def MySql_GetContractAComapnyData_Earning(mySqlDB, company, contract):
+    """
+    从earningtabledb.earningtabletest中提取单合约详细信息
+    :param mySqlDB:
+    :param company:
+    :param contract:
+    :return:
+    """
+    try:
+        sql = 'SELECT 合约代码, 日期, 交易所, 会员简称, 持买仓量, 持买增减量, 持卖仓量, 持卖增减量, 合约持仓量,' \
+              ' 期货品种, 开盘价, 收盘价, 当日结算价, 净持仓, 净持仓变动, 当日盈亏 FROM earningtabletest ' \
+              'where  合约代码 = "%s" and 会员简称 = "%s"' % (contract, company)
+        results = mySqlDB.GetResults(sql)
+        table = pd.DataFrame(list(results))
+        table.columns = ['合约代码', '日期', '交易所', '会员简称', '持买仓量', '持买增减量', \
+                         '持卖仓量', '持卖增减量', '合约持仓量', '期货品种', '开盘价', '收盘价', '当日结算价', '净持仓', '净持仓变动', '当日盈亏']
+        #        table.index=pd.to_datetime(table['日期'])
+        table = table[table['合约持仓量'] > 0]
+        return table
+    except Exception as e:
+        raise e
