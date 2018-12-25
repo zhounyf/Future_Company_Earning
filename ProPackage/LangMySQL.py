@@ -353,7 +353,7 @@ def MySql_GetSeasonDay(mySqlDB, company, start, end, shift):
     :param start:
     :param end:
     :param shift:
-    :return:
+    :return:tablebuy
     """
     sql = 'Select * from sevaralearning where 会员简称= "%s" and 日期 >= "%s" and ' \
           '日期 <= "%s" and 间隔天数 = "%d";' % (company, start, end, shift)
@@ -363,8 +363,9 @@ def MySql_GetSeasonDay(mySqlDB, company, start, end, shift):
         table.columns = ['间隔天数', '持有天数', '会员简称', '合约代码', '多头占比', '日期', '开盘价', '最高价',
                          '最低价', '收盘价', '持买仓量', '持买增减量', '持买增减量sign', '合约持仓量', '合约持仓变化量',
                          '交易盈亏', '累计持仓盈亏', '总盈亏']
-        # table.index = pd.to_datetime(table['日期'])
-        # del table['日期']
+        table = table.sort_values(['日期', '持有天数'])
+        table.index = range(len(table))
+        table['日期'] = table['日期'].apply(lambda x: pd.datetime.strftime(x, '%Y-%m-%d'))
         return table
 
 

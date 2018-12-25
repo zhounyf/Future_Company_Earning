@@ -1,5 +1,5 @@
 import datetime
-
+import pandas as pd
 
 def frameToTuple(dataframe):
     """
@@ -53,7 +53,7 @@ def Make_Interval_Pecentage(low, high, interval):
     """
     low = float("%0.1f" % (pd.np.floor(low / interval) * interval)) * 100
     high = float("%0.1f" % (pd.np.ceil(high / interval) * interval)) * 100
-    f = list(range(int(pd.np.floor(np.round(low, 1))), int(pd.np.ceil(np.round(high, 1) + interval * 100)),
+    f = list(range(int(pd.np.floor(pd.np.round(low, 1))), int(pd.np.ceil(pd.np.round(high, 1) + interval * 100)),
                    int(interval * 100)))
     f = [i / 100 for i in f]
     return f

@@ -2,6 +2,9 @@ from ProPackage.LangMySQL import *
 from ProPackage.ProConfig import *
 from ProPackage.ProTool import *
 from EarningTable.EarningSimilarCompanys import Get_Contracts
+import numpy as np
+pd.set_option('mode.chained_assignment', None)
+
 
 
 def get_compare_table(mysql_db, company, contract):
@@ -52,7 +55,7 @@ def MakeEarningTableOneDay(table, ratio, days, ratiokind):
             L = [days, company, contract, ratio, date, openvalue, highvalue, lowvalue, closevalue, buyvalue, changValue,
                  changValuesign, totalOI, totalOIchange, exchangeEarning, holdEarning, totalEarning]
             ans.append(L)
-    ansTable = pd.DataFrame(ans, columns=['持有天数', '期货公司', '合约代码', ratiokind, '日期', '开盘价', '最高价', '最低价',
+    ansTable = pd.DataFrame(ans, columns=['持有天数', '会员简称', '合约代码', ratiokind, '日期', '开盘价', '最高价', '最低价',
                                           '收盘价', '持买仓量', '持买增减量', '持买增减量sign', '合约持仓量', '合约持仓变化量',
                                           '交易盈亏', '累计持仓盈亏', '总盈亏'])
     return ansTable
@@ -116,16 +119,17 @@ def SeveralEarning(mySqlDB, companys, Name_Date, ratiokind, shift):
                 print("%s,%s 输入完成" % (company, Name_Date[i][2]))
 
 
-def MakeSeveralEarning(mySqlDB, contractname, start, end, companys, ratiokind, shifts):
+def MakeSeveralEarning(mySqlDB, contract, start, end, companys, ratiokind, shifts):
     """
     将所有期货公司不同间隔时间的不同持有天数的盈亏数据导入mysql.earningtabletest
     :param mySqlDB: localhost
     :return:
     """
     for shift in range(1, shifts + 1):
-        Name_Date = Get_Contracts(contractname, start, end)
+        Name_Date = Get_Contracts(contract, start, end)
         SeveralEarning(mySqlDB, companys, Name_Date, ratiokind, shift)
         print('间隔天数为' + str(shift) + ' 导入完成！')
+
 
 def MakeEarningDateTable(table, Dates):
     """
@@ -148,17 +152,126 @@ def MakeEarningDateTable(table, Dates):
     return table
 
 
+def MakeEarning(table, ratiokind='多头占比'):
+    """
+    返回以区间为index,间隔为0.2,15天收益情况的表，并统计相应区间的交易次数
+    :param table: MySql_GetSeasonDay
+    :param ratiokind:
+    :return:
+    """
+    table = table[table['持买增减量sign'] > 0]
+    L = []
+    contract = table['合约代码'].values[0]
+    company = table['会员简称'].values[0]
+    value = table[ratiokind].drop_duplicates().values
+    value.sort()
+    interval = Make_Interval_Pecentage(value[0], value[-1], 0.2)
+    table['interval'] = pd.cut(list(table[ratiokind]), interval)
+
+    for day in range(1, 16):
+        A = table[table['持有天数'] == day]
+        A['interval'] = pd.cut(list(A[ratiokind]), interval)
+        l = A.groupby(by='interval').mean().dropna()['总盈亏']
+        l = l.rename(columns={'总盈亏': day})
+        L.append(l)
+    ans = pd.concat(L, axis=1).astype('int')
+    ans['left'] = [i.left for i in ans.index]
+    ans['right'] = [i.right for i in ans.index]
+    ans['品种'] = ''.join(re.findall(r'[A-Za-z]', contract)).upper()
+    ans['会员简称'] = company
+    ans.columns = ['day1', 'day2', 'day3', 'day4', 'day5', 'day6', 'day7', 'day8', 'day9', 'day10',
+                   'day11', 'day12', 'day13', 'day14', 'day15', 'interleft', 'interright', 'contract', 'company']
+    counts = pd.DataFrame(table['interval'].value_counts())
+    counts.columns = ['counts']
+    counts = counts[counts['counts'] != 0]
+    ans = pd.concat([ans, counts / 15], axis=1)
+    return ans
+
+def TrainBuyMean(traintable):
+    """
+    将traintable按行求均值，选择持有15天内每天盈亏均值大于0的行，并求出持有15天盈利最大的那天
+    :param ContractName:
+    :param CutDate:
+    :return:TrainBuy(对累计15天数据进行行列均值统计,包含区间内交易次数);
+            a('Mark' =1,并添加最大天数列);
+            Values(由区间左值与最大天数的组成的ndarray)
+    """
+    TrainBuy = pd.concat([traintable[traintable.columns[:15]], traintable[traintable.columns[-1]]], axis=1)
+    TrainBuy['left'] = [i.left for i in TrainBuy.index]
+    TrainBuy = TrainBuy[TrainBuy['left'] > 0]
+    del TrainBuy['left']
+    TrainBuy.index = [str(i) for i in TrainBuy.index]
+    a = pd.DataFrame(TrainBuy.mean(axis=0).astype('int')).T
+    a.index = ['MeanCol']
+    TrainBuy = pd.concat([TrainBuy, a], sort=False)
+    TrainBuy['MeanRow'] = TrainBuy[TrainBuy.columns[:15]].mean(axis=1).astype('int')
+    TrainBuy['Mark'] = [np.sign(i) if i > 0 else 0 for i in TrainBuy['MeanRow']]
+
+    a = (TrainBuy[TrainBuy.columns[:15]] / (np.log(range(3, 18)) / np.log(3))).astype('int')
+    # for i in a.columns:
+    #     a[i][a[i] < a.loc['MeanCol', i]] = np.NaN
+    a['Mark'] = TrainBuy['Mark']
+    a['MaxDay'] = [a.iloc[j, :].dropna().sort_values(ascending=False).index[0] for j in range(len(a))]
+    a['MaxDay'] = a['MaxDay'].replace('Mark', '-')
+    a['MeanRow'] = TrainBuy['MeanRow']
+    # a.fillna('-', inplace=True)
+    a['MaxDay'] = a[a.columns[:15]].apply(pd.Series.idxmax, axis=1).map(
+        lambda x: int(''.join(re.findall(r'[0-9]', x))))
+    a.loc['MeanCol', 'Mark'] = 1
+    a = a[a['Mark'] == 1]
+    SelectBuy = a.copy()
+    SelectBuy = SelectBuy.iloc[:-1]
+    SelectBuy['Left'] = [round(float(i.split(',')[0][1:]), 1) for i in SelectBuy.index]
+    Values = SelectBuy[['Left', 'MaxDay']].values
+    return TrainBuy, a, Values
+
+def selectEarning(testbuy, values, dates, CutDate):
+    """
+    :param table: testbuy
+    :param values:
+    :param dates:
+    :param CutDate:
+    :return: res(train表中(天数，占比)在test表中对应的数据;counts(res的统计表)
+    """
+    testbuy2 = testbuy[['日期', '盈利日期', '观察天数', '合约代码', '多头占比', '交易盈亏', '累计持仓盈亏', '总盈亏']]
+    days = testbuy2['日期'].drop_duplicates().values
+    L = []
+    for day in days:
+        testoneday = testbuy2[testbuy2['日期'] == day]
+        ratio = testoneday['多头占比'].iloc[0]
+        if ratio in values[:, 0]:
+            tempday = values[values[:, 0] == ratio][:, 1][0]
+            l = testoneday[testoneday['观察天数'] == tempday]
+            L.append(l)
+    if len(L) > 0:
+        res = pd.concat(L)
+        res = res[res['盈利日期'] != "-1"]
+        res.index = pd.to_datetime(res['盈利日期'])
+        res['累计盈亏'] = res['总盈亏'].cumsum()
+        earning = res.pivot_table(index='多头占比', values='总盈亏', aggfunc=np.sum)
+        counts = pd.concat(
+            [earning, res[['多头占比', '观察天数']].drop_duplicates().set_index('多头占比'), res['多头占比'].value_counts()], axis=1)
+        counts = counts.rename(columns={'观察天数': '持有天数', '多头占比': '交易次数'})
+        row = counts.apply(func={'总盈亏': sum, '持有天数': np.mean, '交易次数': sum}).apply(round).rename('Describe')
+        counts = pd.concat([counts, pd.DataFrame(row).T])
+        return res, counts
+    # else:
+    #     print("没有对应情况")
+    #     return 0, 0
+
+
 if __name__ == '__main__':
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
 
-    ContractName = 'RB.SHF'
-    StartDate = '2015-01-01'
-    EndDate = '2018-12-18'
-    CutDate = '2016-01-01'
-    Dates = Mysql_GetDates(mySqlDBLocal, StartDate, CutDate)
-
-    table = MySql_GetSeasonDay(mySqlDBLocal, '永安期货', StartDate, CutDate, 1)
-    table = MakeEarningDateTable(table,Dates)
-    print(table)
-    mySqlDBLocal.Close()
+    # ContractName = 'JM.DCE'
+    # StartDate = '2015-01-01'
+    # EndDate = '2018-12-18'
+    # CutDate = '2016-01-01'
+    # Dates = Mysql_GetDates(mySqlDBLocal, StartDate, CutDate)
+    #
+    # trainbuy = MySql_GetSeasonDay(mySqlDBLocal, '永安期货', StartDate, CutDate, 1)
+    # table2 = MakeEarning(trainbuy)
+    # table3 = TrainBuyMean(table2)
+    # print(table)
+    # mySqlDBLocal.Close()
