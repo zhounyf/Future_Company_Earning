@@ -41,3 +41,19 @@ def runtime(func, *args, **kwargs):
     func(*args, **kwargs)
     end = datetime.datetime.now()
     print(end - start)
+
+
+def Make_Interval_Pecentage(low, high, interval):
+    """
+    对浮点数划分区间
+    :param low:
+    :param high:
+    :param interval: 0.2
+    :return:Interval格式的数组
+    """
+    low = float("%0.1f" % (pd.np.floor(low / interval) * interval)) * 100
+    high = float("%0.1f" % (pd.np.ceil(high / interval) * interval)) * 100
+    f = list(range(int(pd.np.floor(np.round(low, 1))), int(pd.np.ceil(np.round(high, 1) + interval * 100)),
+                   int(interval * 100)))
+    f = [i / 100 for i in f]
+    return f

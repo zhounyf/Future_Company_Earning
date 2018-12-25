@@ -86,7 +86,8 @@ def MySql_CreateTable_SeveralEarning(mySqlDB):
     try:
         mySqlDB.Sql("""
         CREATE TABLE `sevaralearning` (
-        `观察天数` int(2) DEFAULT NULL,
+        `间隔天数` int(2) DEFAULT NULL,
+        `持有天数` int(2) DEFAULT NULL,
         `会员简称` varchar(8) DEFAULT NULL,
         `合约代码` varchar(8) DEFAULT NULL,
         `多头占比` float DEFAULT NULL,
@@ -108,8 +109,6 @@ def MySql_CreateTable_SeveralEarning(mySqlDB):
 
     except Exception as e:
         raise e
-
-
 
 
 def MySql_BatchInsertCompanylist(mySqlDB, values, proLog=None, isLog=False):
@@ -134,15 +133,39 @@ def MySql_BatchInsertCompanylist(mySqlDB, values, proLog=None, isLog=False):
 
 
 def MySql_BatchInsertEarningTable(mySqlDB, values, proLog=None, isLog=False):
-    '''
+    """
     将数据批量加入“期货公司单品种当日盈亏表”
-    '''
+    :param mySqlDB: localhost
+    :param values: np.ndarray
+    """
     try:
         if len(values) > 0:
             mySqlDB.Sqls('''
             insert into earningtabletest(合约代码, 日期, 交易所, 会员简称, 持买仓量, 持买增减量,
                   持卖仓量, 持卖增减量, 合约持仓量, 期货品种, 开盘价, 最高价,
                   最低价, 收盘价, 当日结算价, 净持仓, 净持仓变动, 当日盈亏) 
+            values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
+            if isLog and proLog is not None:
+                proLog.Log('Table texchangefutureday BatchInsert %d Successfully ' % len(values))
+        else:
+            if isLog and proLog is not None:
+                proLog.Log('Table texchangefutureday BatchInsert Nothing')
+    except Exception as e:
+        raise e
+
+
+def MySql_BatchInsertSeveralEarning(mySqlDB, values, proLog=None, isLog=False):
+    """
+    将数据批量加入“多间隔天数多持有天数”
+    :param mySqlDB: localhost
+    :param values: np.ndarray
+    """
+    try:
+        if len(values) > 0:
+            mySqlDB.Sqls('''
+            insert into sevaralearning(间隔天数, 持有天数, 会员简称, 合约代码, 多头占比, 日期, 开盘价, 最高价,
+                  最低价, 收盘价, 持买仓量, 持买增减量, 持买增减量sign, 合约持仓量, 合约持仓变化量, 
+                  交易盈亏, 累计持仓盈亏,总盈亏) 
             values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
             if isLog and proLog is not None:
                 proLog.Log('Table texchangefutureday BatchInsert %d Successfully ' % len(values))
@@ -309,14 +332,54 @@ def MySql_GetContractAComapnyData_Earning(mySqlDB, company, contract):
     """
     try:
         sql = 'SELECT 合约代码, 日期, 交易所, 会员简称, 持买仓量, 持买增减量, 持卖仓量, 持卖增减量, 合约持仓量,' \
-              ' 期货品种, 开盘价, 收盘价, 当日结算价, 净持仓, 净持仓变动, 当日盈亏 FROM earningtabletest ' \
+              ' 期货品种, 开盘价, 最高价, 最低价, 收盘价, 当日结算价, 净持仓, 净持仓变动, 当日盈亏 FROM earningtabletest ' \
               'where  合约代码 = "%s" and 会员简称 = "%s"' % (contract, company)
         results = mySqlDB.GetResults(sql)
         table = pd.DataFrame(list(results))
         table.columns = ['合约代码', '日期', '交易所', '会员简称', '持买仓量', '持买增减量', \
-                         '持卖仓量', '持卖增减量', '合约持仓量', '期货品种', '开盘价', '收盘价', '当日结算价', '净持仓', '净持仓变动', '当日盈亏']
+                         '持卖仓量', '持卖增减量', '合约持仓量', '期货品种', '开盘价', '最高价', '最低价', '收盘价', '当日结算价', '净持仓', '净持仓变动', '当日盈亏']
         #        table.index=pd.to_datetime(table['日期'])
         table = table[table['合约持仓量'] > 0]
         return table
     except Exception as e:
         raise e
+
+
+def MySql_GetSeasonDay(mySqlDB, company, start, end, shift):
+    """
+    从earningtable.sevaralearning 中按期货公司和间隔计算时间提取一段区间内所有持有天数的盈亏数据。
+    :param mySqlDB:localhost
+    :param company:
+    :param start:
+    :param end:
+    :param shift:
+    :return:
+    """
+    sql = 'Select * from sevaralearning where 会员简称= "%s" and 日期 >= "%s" and ' \
+          '日期 <= "%s" and 间隔天数 = "%d";' % (company, start, end, shift)
+    results = mySqlDB.GetResults(sql)
+    if len(results) > 0:
+        table = pd.DataFrame(list(results))
+        table.columns = ['间隔天数', '持有天数', '会员简称', '合约代码', '多头占比', '日期', '开盘价', '最高价',
+                         '最低价', '收盘价', '持买仓量', '持买增减量', '持买增减量sign', '合约持仓量', '合约持仓变化量',
+                         '交易盈亏', '累计持仓盈亏', '总盈亏']
+        # table.index = pd.to_datetime(table['日期'])
+        # del table['日期']
+        return table
+
+
+def Mysql_GetDates(mySqlDB, startdate, enddate):
+    """
+    提取一段时间区间内的完整交易日期序列
+    :param mySqlDB:
+    :param startdate:
+    :param enddate:
+    :return:
+    """
+    sql = 'select distinct 日期 FROM earningtabledb.earningtabletest where 日期 >= "%s" and 日期 <= "%s";' % (
+    startdate, enddate)
+    results = mySqlDB.GetResults(sql)
+    Dates = pd.DataFrame(list(results))
+    Dates.columns = ['Dates']
+    Dates['Dates'] = [i.strftime("%Y-%m-%d") for i in Dates['Dates']]
+    return Dates

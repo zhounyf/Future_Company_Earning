@@ -2,6 +2,7 @@ from ProPackage.LangMySQL import *
 from ProPackage.ProConfig import *
 from ProPackage.ProMySqlDB import ProMySqlDB
 from ProPackage.ProTool import *
+from EarningTable.EarningFuture import *
 import os
 
 
@@ -97,10 +98,11 @@ def TableToMysql(mySqlDB, table):
     """
     values = frameToTuple(table)
     # MySql_BatchInsertCompanylist(mySqlDBLocal, values)
-    MySql_BatchInsertEarningTable(mySqlDB, values)
+    # MySql_BatchInsertEarningTable(mySqlDB, values)
 
 
-def MakeCompanyListTest(mySqlDB, mySqlDB2, companys, start, end):
+
+def MakeCompanyList(mySqlDB, mySqlDB2, companys, start, end):
     """
     批量将40家期货公司的数据导入mySqlDBLocal.CompanyListTest中
     :param mySqlDB: mySqlDBLocal
@@ -133,18 +135,14 @@ def MakeEarningTables(mySqlDB, mySqlDB2, companys, multipliertable):
                 pass
 
 
-
-
-
-# if __name__ == '__main__':
+if __name__ == '__main__':
     mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
 
-    # MakeCompanyListTest(mySqlDBReader, mySqlDBLocal, Companys, start, end)
+    # MakeCompanyList(mySqlDBReader, mySqlDBLocal, Companys, start, end)
     # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable)
-
 
     # mySqlDBReader.Close()
     # mySqlDBLocal.Close()
