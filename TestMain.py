@@ -6,10 +6,10 @@ from ProPackage.ProTool import *
 from datetime import datetime
 
 
-def get_largedata():
+def get_largedata(mySqlDB):
     L = []
     for i in range(100):
-        table1 = Mysql_GetContractPrice(mySqlDBLocal, '2016-01-05')
+        table1 = Mysql_GetContractPrice(mySqlDB, '2016-01-05')
         L.append(table1)
     table = runtimeR(pd.concat, L)
     return table
@@ -72,6 +72,8 @@ def main():
 
 
 if __name__ == '__main__':
-    ans = runtime(main)
+    mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
+                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    ans = runtimeR(get_largedata,mySqlDBReader)
     # ans.insert(0, 0, value=ans.index.values)
     print(ans)

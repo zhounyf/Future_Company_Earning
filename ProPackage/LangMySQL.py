@@ -85,7 +85,7 @@ def MySql_CreateTable_SeveralEarning(mySqlDB):
     """
     try:
         mySqlDB.Sql("""
-        CREATE TABLE `sevaralearning` (
+        CREATE TABLE `severalearning` (
         `间隔天数` int(2) DEFAULT NULL,
         `持有天数` int(2) DEFAULT NULL,
         `会员简称` varchar(8) DEFAULT NULL,
@@ -163,7 +163,7 @@ def MySql_BatchInsertSeveralEarning(mySqlDB, values, proLog=None, isLog=False):
     try:
         if len(values) > 0:
             mySqlDB.Sqls('''
-            insert into sevaralearning(间隔天数, 持有天数, 会员简称, 合约代码, 多头占比, 日期, 开盘价, 最高价,
+            insert into severalearning(间隔天数, 持有天数, 会员简称, 合约代码, 多头占比, 日期, 开盘价, 最高价,
                   最低价, 收盘价, 持买仓量, 持买增减量, 持买增减量sign, 合约持仓量, 合约持仓变化量, 
                   交易盈亏, 累计持仓盈亏,总盈亏) 
             values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
@@ -347,7 +347,7 @@ def MySql_GetContractAComapnyData_Earning(mySqlDB, company, contract):
 
 def MySql_GetSeasonDay(mySqlDB, company, start, end, shift):
     """
-    从earningtable.sevaralearning 中按期货公司和间隔计算时间提取一段区间内所有持有天数的盈亏数据。
+    从earningtable.severalearning 中按期货公司和间隔计算时间提取一段区间内所有持有天数的盈亏数据。
     :param mySqlDB:localhost
     :param company:
     :param start:
@@ -355,7 +355,7 @@ def MySql_GetSeasonDay(mySqlDB, company, start, end, shift):
     :param shift:
     :return:tablebuy
     """
-    sql = 'Select * from sevaralearning where 会员简称= "%s" and 日期 >= "%s" and ' \
+    sql = 'Select * from severalearning where 会员简称= "%s" and 日期 >= "%s" and ' \
           '日期 <= "%s" and 间隔天数 = "%d";' % (company, start, end, shift)
     results = mySqlDB.GetResults(sql)
     if len(results) > 0:
@@ -384,3 +384,42 @@ def Mysql_GetDates(mySqlDB, startdate, enddate):
     Dates.columns = ['Dates']
     Dates['Dates'] = [i.strftime("%Y-%m-%d") for i in Dates['Dates']]
     return Dates
+
+
+def Mysql_CheckCompanylistDate(mySqlDB):
+    """
+    查询Companylist表中最新的日期
+    :param mySqlDB:
+    :return:
+    """
+    sql = 'select 日期 from companylist order by 日期 desc limit 1'
+    results = mySqlDB.GetResults(sql)
+    print("companylist表中截至日期为：%s" %pd.datetime.strftime(results[0][0],'%Y-%m-%d'))
+
+
+def Mysql_CheckSeveralearningDate(mySqlDB):
+    """
+    查询Severalearning距离最新日期前16日的日期，需要从该日期开始更新数据库
+    :param mySqlDB:
+    :return:
+    """
+    sql = 'select * from (select distinct 日期 from severalearning where 日期 >="2018-10-01" order by 日期 desc limit 16) as A order by 日期 asc limit 1;'
+    results = mySqlDB.GetResults(sql)
+    print("companylist表中截至日期为：%s" %pd.datetime.strftime(results[0][0],'%Y-%m-%d'))
+
+
+def Mysql_GetMainContracts(mySqlDB,contractname):
+    """
+    获得某一品种的所有主力合约名称和存续期
+    :param mySqlDB:
+    :param contractname:
+    :return:
+    """
+    sql = 'SELECT FRealContract,FTradeDay FROM quotationdb.stfutureday where FFlag = 1 ' \
+          'and FRealContract like "%s" order by FTradeDay;' % (contractname.split('.')[0]+'%')
+    results = mySqlDB.GetResults(sql)
+    ans = pd.DataFrame(list(results))
+    ans.columns = ['合约代码', '日期']
+    # ans.index = [pd.datetime.strftime(x, '%Y-%m-%d') for x in ans['日期']]
+    ans.index = pd.to_datetime(ans['日期'])
+    return ans
