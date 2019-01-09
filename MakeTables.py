@@ -2,7 +2,7 @@ from ProPackage.LangMySQL import *
 from ProPackage.ProConfig import *
 from ProPackage.ProMySqlDB import ProMySqlDB
 from ProPackage.ProTool import *
-from EarningTable.EarningFuture import *
+from EarningFuture import *
 import os
 
 

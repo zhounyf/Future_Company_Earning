@@ -1,3 +1,7 @@
+"""
+用途: 生成severalearning中间表，用于计算测试期货持仓盈亏情况。
+"""
+
 from ProPackage.LangMySQL import *
 from ProPackage.ProConfig import *
 from ProPackage.ProTool import *
@@ -5,6 +9,7 @@ from EarningSimilarCompanys import Get_Contracts
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+
 pd.set_option('mode.chained_assignment', None)
 
 
@@ -125,7 +130,7 @@ def SeveralEarning(mySqlDB, companys, Name_Date, ratiokind, shift):
                 # return values
 
 
-def MakeSeveralEarning(mySqlDB, mySqlDB2,contract, start, end, companys, ratiokind, shifts):
+def MakeSeveralEarning(mySqlDB, mySqlDB2, contract, start, end, companys, ratiokind, shifts):
     """
     将所有期货公司不同间隔时间的不同持有天数的盈亏数据导入mysql.earningtabletest
     :param mySqlDB: localhost
@@ -135,6 +140,7 @@ def MakeSeveralEarning(mySqlDB, mySqlDB2,contract, start, end, companys, ratioki
     for shift in range(1, shifts + 1):
         SeveralEarning(mySqlDB, companys, Name_Date, ratiokind, shift)
         print('间隔天数为' + str(shift) + ' 导入完成！')
+    # MakeSeveralEarning(mySqlDBLocal,mySqlDBReader, ContractName,'2018-08-17','2018-12-31',Companys,'多头占比',5)
 
 
 def MakeEarningDateTable(table, Dates):
@@ -158,7 +164,7 @@ def MakeEarningDateTable(table, Dates):
     return table
 
 
-def MakeEarning(table, ratiokind='多头占比'):
+def MakeDaysEarning(table, ratiokind='多头占比'):
     """
     返回以区间为index,间隔为0.2,15天“平均”收益情况的表，并统计相应区间的交易次数
     :param table: MySql_GetSeasonDay
@@ -203,7 +209,7 @@ def TrainBuyMean(traintable):
     """
     TrainBuy = pd.concat([traintable[traintable.columns[:15]], traintable[traintable.columns[-1]]], axis=1)
     TrainBuy['left'] = [i.left for i in TrainBuy.index]
-    TrainBuy = TrainBuy[TrainBuy['left'] > 0]
+    TrainBuy = TrainBuy[TrainBuy['left'] >= 0]
     del TrainBuy['left']
     TrainBuy.index = [str(i) for i in TrainBuy.index]
     a = pd.DataFrame(TrainBuy.mean(axis=0).astype('int')).T
@@ -227,6 +233,7 @@ def TrainBuyMean(traintable):
     SelectBuy = a.copy()
     SelectBuy = SelectBuy.iloc[:-1]
     SelectBuy['Left'] = [round(float(i.split(',')[0][1:]), 1) for i in SelectBuy.index]
+    # SelectBuy['合约代码'] = contract
     Values = SelectBuy[['Left', 'MaxDay']].values
     return TrainBuy, a, Values
 
@@ -239,7 +246,7 @@ def selectEarning(testbuy, values, dates, CutDate):
     :param CutDate:
     :return: res(train表中(天数，占比)在test表中对应的数据;counts(res的统计表)
     """
-    testbuy = MakeEarningDateTable(testbuy,dates)
+    testbuy = MakeEarningDateTable(testbuy, dates)
     testbuy2 = testbuy[['日期', '盈利日期', '持有天数', '合约代码', '多头占比', '交易盈亏', '累计持仓盈亏', '总盈亏']]
     days = testbuy2['日期'].drop_duplicates().values
     L = []
@@ -267,47 +274,54 @@ def selectEarning(testbuy, values, dates, CutDate):
         return None, None
 
 
+def MakeCompanyTestAnswer(NameDate, companys, contract, shift):
+    """
+    以永安期货为基准，按合约代码和多头占比left_join其他期货公司的多头占比值和持有天数
+    :param company:['永安期货',...]
+    :param contract:
+    :param shift:
+    :return:
+    """
+    start = NameDate[NameDate[:, 2] == contract][0][0]
+    end = NameDate[NameDate[:, 2] == contract][0][1]
+    T = []
+    for company in companys:
+        trainbuy = MySql_GetSeasonDay(mySqlDBLocal, company, start, end, shift)
+        daystable = MakeDaysEarning(trainbuy)
+        TrainBuy1, SelectBuy1, Values1 = TrainBuyMean(daystable)
+        Values1 = np.insert(Values1, 2, 0, axis=1)
+        Values1 = np.insert(Values1, 3, shift, axis=1)
+        table = pd.DataFrame(Values1, columns=['多头占比', '持有天数', '合约代码', '间隔天数'])
+        table['合约代码'] = contract
+        table.index = table[['合约代码', '多头占比']]
+        del table['合约代码']
+        table.columns = table.columns.values + "_{_company}".format(_company=company)
+        T.append(table)
+    TFirst = T[0]
+    for i in range(1, len(T)):
+        TFirst = pd.merge(TFirst, T[i].iloc[:, :2], how='outer', left_index=True, right_index=True)
 
-def main(mySqlDB, company, StartDate, EndDate,CutDate,shift):
+    return TFirst
+
+
+def main(mySqlDB, contractName, company, StartDate, EndDate, CutDate, shift):
+    """
+    综合函数生成company在StartDate, EndDate内，以CutDate划分前后trainbuy，testbuy两段数据，
+    用trainbuy生成的多头占比与持有天数在testbuy中统计符合条件的数据，按多头占比分组统计盈亏的累计值
+    :param mySqlDB:localhost
+    :param shift:range(1,5)
+    :return:
+    """
     Dates = Mysql_GetDates(mySqlDB, StartDate, EndDate)
-    # NameDate = Get_Contracts(ContractName, StartDate, EndDate)
-    trainbuy = MySql_GetSeasonDay(mySqlDB, company, StartDate, CutDate, shift)
-    testbuy = MySql_GetSeasonDay(mySqlDB, company, CutDate, EndDate, shift)
-    table2 = MakeEarning(trainbuy)
+    NameDate = Get_Contracts(contractName, StartDate, EndDate)
+    trainbuy = MySql_GetSeasonDay(mySqlDB, contractName, company, StartDate, CutDate, shift)
+    testbuy = MySql_GetSeasonDay(mySqlDB, contractName, company, CutDate, EndDate, shift)
+    table2 = MakeDaysEarning(trainbuy)
     TrainBuy1, SelectBuy1, Values1 = TrainBuyMean(table2)
     TestAns1, TestAnsCounts1 = selectEarning(testbuy, Values1, Dates, CutDate)
     TestAnsCounts1['间隔天数'] = shift
     return TestAnsCounts1
 
-if __name__ == '__main__':
-    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
-                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-    mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
-                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
 
-    ContractName = 'RB.SHF'
-    StartDate = '2016-01-01'
-    EndDate = '2018-12-31'
-    CutDate = '2017-01-01'
-    # Dates = Mysql_GetDates(mySqlDBLocal, StartDate, EndDate)
-    NameDate = Get_Contracts(mySqlDBReader,ContractName,StartDate,EndDate)
-    print(NameDate)
-    # TrainBuyList = []
-    # for company in Companys:
-    #     temp = (MySql_GetSeasonDay(mySqlDBLocal, company, StartDate, CutDate, 1))
-    #     if temp is not None:
-    #         TrainBuyList.append(temp)
-    # trainbuy = MySql_GetSeasonDay(mySqlDBLocal, '永安期货', StartDate, CutDate, 1)
-    # testbuy = MySql_GetSeasonDay(mySqlDBLocal, '永安期货', CutDate, EndDate, 1)
-    # table2 = MakeEarning(trainbuy)
-    # TrainBuy1, SelectBuy1, Values1 = TrainBuyMean(table2)
-    # TestAns1, TestAnsCounts1 = selectEarning(testbuy, Values1, Dates, CutDate)
-    # print(Values1)
-    # print(TestAnsCounts1)
-    # Dates = runtimeR(Mysql_GetDates,mySqlDBLocal, StartDate, EndDate)
-    # trainbuy = runtimeR(MySql_GetSeasonDay, mySqlDBLocal, '永安期货', StartDate, CutDate, 1)
-    # Mysql_CheckSeveralearningDate(mySqlDBLocal)
-    MakeSeveralEarning(mySqlDBLocal,mySqlDBReader, ContractName,'2018-08-17','2018-12-31',Companys,'多头占比',5)
-    mySqlDBLocal.Close()
-    mySqlDBReader.Close()
-    #
+
+

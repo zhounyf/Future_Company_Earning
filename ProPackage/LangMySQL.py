@@ -195,7 +195,7 @@ def Mysql_GetContractPrice(mySqlDB, date):
 def MySql_GetDateLists(mySqlDB, start):
     """
     获取从start日开始的日期列表
-    :param mySqlDB: reader
+    :param mySqlDB: localhost
     :param start:
     :return:
     """
@@ -211,7 +211,7 @@ def MySql_GetDateLists(mySqlDB, start):
 def Mysql_GetCompanyOITable(mySqlDB, company, date, proLog=None, isLog=False):
     """
     从informationdb.texchangefuturerank数据库中提取某期货公司席位在所有合约上的多空持仓情况，并添加各合约当日价格
-    :param mySqlDB: reader
+    :param mySqlDB: localhost
     :param company:
     :param date:
     :param proLog:
@@ -246,7 +246,7 @@ def Mysql_GetCompanyOITable(mySqlDB, company, date, proLog=None, isLog=False):
 def Mysql_GetOneContractPrice(mySqlDB, contract):
     """
     获取单一合约的所有价格信息
-    :param mySqlDB:reader
+    :param mySqlDB:localhost
     :param contract:
     :return:
     """
@@ -345,7 +345,7 @@ def MySql_GetContractAComapnyData_Earning(mySqlDB, company, contract):
         raise e
 
 
-def MySql_GetSeasonDay(mySqlDB, company, start, end, shift):
+def MySql_GetSeasonDay(mySqlDB, contractname, company, start, end, shift):
     """
     从earningtable.severalearning 中按期货公司和间隔计算时间提取一段区间内所有持有天数的盈亏数据。
     :param mySqlDB:localhost
@@ -355,8 +355,11 @@ def MySql_GetSeasonDay(mySqlDB, company, start, end, shift):
     :param shift:
     :return:tablebuy
     """
-    sql = 'Select * from severalearning where 会员简称= "%s" and 日期 >= "%s" and ' \
-          '日期 <= "%s" and 间隔天数 = "%d";' % (company, start, end, shift)
+    contractname = contractname.split(".")[0] + "%"
+    sql = 'Select * from severalearning where 会员简称= "%s" and 日期 >= "%s" ' \
+          'and 日期 <= "%s" and 合约代码 LIKE "%s" and 间隔天数 = "%d" order by 日期 asc;' \
+          % (company, start, end, contractname, shift)
+
     results = mySqlDB.GetResults(sql)
     if len(results) > 0:
         table = pd.DataFrame(list(results))
@@ -378,7 +381,7 @@ def Mysql_GetDates(mySqlDB, startdate, enddate):
     :return:
     """
     sql = 'select distinct 日期 FROM earningtabledb.earningtabletest where 日期 >= "%s" and 日期 <= "%s";' % (
-    startdate, enddate)
+        startdate, enddate)
     results = mySqlDB.GetResults(sql)
     Dates = pd.DataFrame(list(results))
     Dates.columns = ['Dates']
@@ -394,7 +397,7 @@ def Mysql_CheckCompanylistDate(mySqlDB):
     """
     sql = 'select 日期 from companylist order by 日期 desc limit 1'
     results = mySqlDB.GetResults(sql)
-    print("companylist表中截至日期为：%s" %pd.datetime.strftime(results[0][0],'%Y-%m-%d'))
+    print("companylist表中截至日期为：%s" % pd.datetime.strftime(results[0][0], '%Y-%m-%d'))
 
 
 def Mysql_CheckSeveralearningDate(mySqlDB):
@@ -403,23 +406,85 @@ def Mysql_CheckSeveralearningDate(mySqlDB):
     :param mySqlDB:
     :return:
     """
-    sql = 'select * from (select distinct 日期 from severalearning where 日期 >="2018-10-01" order by 日期 desc limit 16) as A order by 日期 asc limit 1;'
+    sql = 'select * from (select distinct 日期 from severalearning where ' \
+          '日期 >="2018-10-01" order by 日期 desc limit 16) as A order by 日期 asc limit 1;'
     results = mySqlDB.GetResults(sql)
-    print("companylist表中截至日期为：%s" %pd.datetime.strftime(results[0][0],'%Y-%m-%d'))
+    print("companylist表中截至日期为：%s" % pd.datetime.strftime(results[0][0], '%Y-%m-%d'))
 
 
-def Mysql_GetMainContracts(mySqlDB,contractname):
+def Mysql_GetMainContracts(mySqlDB, contractname, start, end):
     """
     获得某一品种的所有主力合约名称和存续期
-    :param mySqlDB:
+    :param mySqlDB:localhost
     :param contractname:
     :return:
     """
-    sql = 'SELECT FRealContract,FTradeDay FROM quotationdb.stfutureday where FFlag = 1 ' \
-          'and FRealContract like "%s" order by FTradeDay;' % (contractname.split('.')[0]+'%')
+    contractname = contractname.split('.')[0] + '%'
+    sql = 'SELECT distinct(FRealContract) FROM stfutureday where FFlag = 1 ' \
+          'and FRealContract like "{contractname}" and FTradeDay Between "{start}" AND "{end}"' \
+          ' order by FTradeDay;'.format(contractname=contractname, start=start, end=end)
+    results = mySqlDB.GetResults(sql)
+    # ans = pd.DataFrame(list(results))
+    # ans.columns = ['合约代码', '日期']
+    # ans.index = [pd.datetime.strftime(x, '%Y-%m-%d') for x in ans['日期']]
+    # ans.index = pd.to_datetime(ans['日期'])
+    results = pd.np.array(results).ravel()
+    return results
+
+
+def Mysql_GetBuyOI(mySqlDB, comany, contract):
+    """
+    返回期货公司在某合约上所有持买仓量
+    :param mySqlDB:
+    :param comany:
+    :param contract:
+    :return:
+    """
+    sql = 'SELECT `日期`,`持买仓量` FROM `companylist` WHERE `会员简称` = "{company}" ' \
+          'AND `合约代码` = "{contract}"'.format(company=comany, contract=contract)
     results = mySqlDB.GetResults(sql)
     ans = pd.DataFrame(list(results))
-    ans.columns = ['合约代码', '日期']
-    # ans.index = [pd.datetime.strftime(x, '%Y-%m-%d') for x in ans['日期']]
+    ans.columns = ['日期', '持买仓量']
     ans.index = pd.to_datetime(ans['日期'])
+    return ans
+
+
+def Mysql_GetRankTopNmaes(mySqlDB, date, contractname, limit):
+    """
+    返回当日多头持仓排名前limit的期货公司名称以及持仓数量合计值
+    :param mySqlDB: localhost
+    :param date:
+    :param contract:
+    :param limit:
+    :return:
+    """
+    contractname = contractname.split('.')[0] + '9999'
+    sql = 'SELECT `FParticipantABBR`,`FNumber` FROM `texchangefuturerank` ' \
+          'WHERE FDate = "{date}" AND FRealContract = "{contract}" AND FType = "持买量" ' \
+          'ORDER BY FRank LIMIT {limit}'.format(date=date, contract=contractname, limit=limit)
+    results = mySqlDB.GetResults(sql)
+    results = pd.np.array(results)
+    return results
+
+
+def Mysql_GetBuyOIIndex(mySqlDB, contractname, start, end):
+    """
+    计算某合约
+    :param mySqlDB: localhost
+    :param contractname:
+    :param start:
+    :param end:
+    :return:
+    """
+    contractname = contractname.split('.')[0] + '9999'
+    sql = 'SELECT `FTradeDay`,`FOpenInst`,`FOpen`,`FHigh`,`FLow`,`FClose` FROM `stfutureday` WHERE `FRealContract` = "{contractname}"  AND `FTradeDay` BETWEEN "{start}" AND "{end}"' \
+          ''.format(contractname=contractname, start=start, end=end)
+    results = mySqlDB.GetResults(sql)
+    ans = pd.DataFrame(list(results))
+    ans.columns = ['日期', '持买仓量', '开盘价', '最高价', '最低价', '收盘价']
+    # ans['日期'] = [i.strftime("%Y-%m-%d") for i in ans['日期']]
+    ans.index = pd.to_datetime(ans['日期'])
+    del ans['日期']
+    ans[['持买仓量', '开盘价', '最高价', '最低价', '收盘价']] = \
+        ans[['持买仓量', '开盘价', '最高价', '最低价', '收盘价']].applymap(lambda x: round(x))
     return ans

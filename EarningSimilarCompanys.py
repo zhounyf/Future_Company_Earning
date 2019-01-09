@@ -22,15 +22,16 @@ def CorrelationTable(mySqlDB, ratiokind, companys, contract, start, end):
         if temp is not None:
             columnDataList.append(temp)
 
-    table = pd.concat(columnDataList, axis=1)
-    names = table.mean()[table.mean() > table.mean().mean()].index.values
-    corrtable = table[names]
-    corr = corrtable.corrwith(corrtable['永安期货']).sort_values(ascending=False)
-    corr = pd.DataFrame(corr, columns=['相关性'])
-    corr = corr[corr['相关性'] > 0.0]
-    corr['合约代码'] = contract
-    corrtable = table[corr.index]
-    return corrtable, corr
+    # table = pd.concat(columnDataList, axis=1)
+    # names = table.mean()[table.mean() > table.mean().mean()].index.values
+    # corrtable = table[names]
+    # corr = corrtable.corrwith(corrtable['永安期货']).sort_values(ascending=False)
+    # corr = pd.DataFrame(corr, columns=['相关性'])
+    # corr = corr[corr['相关性'] > 0.0]
+    # corr['合约代码'] = contract
+    # corrtable = table[corr.index]
+    # return corrtable, corr
+    return columnDataList
 
 
 def Get_Contracts(mySqlDB, contractname, start, end):
@@ -95,7 +96,7 @@ def MakeCorrTable(Lcorr):
     :return:
     """
     temp0 = Lcorr[0]
-    for i in range(1, len(L)):
+    for i in range(1, len(Lcorr)):
         temp0 = pd.merge(temp0, Lcorr[i], how='outer', left_index=True, right_index=True)
     corrcolumns = list(range(0,len(Lcorr)*2,2))
     contractcolumns = list(range(1,len(Lcorr)*2+1 ,2))
@@ -105,27 +106,35 @@ def MakeCorrTable(Lcorr):
     return newtemp
 
 
-# if __name__ == '__main__':
-#     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
-#                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-#     mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
-#                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
-#     Company = ['永安期货']
-#     ContractName = 'RB.SHF'
-#     StartDate = '2017-01-01'
-#     EndDate = '2018-12-31'
-#     CutDate = '2017-01-01'
-#     DayInterval = 1
-#     Name_Date = Get_Contracts(mySqlDBReader, ContractName, StartDate, EndDate)
-#     L = []
-#     for i in range(len(Name_Date)):
-#         contract = Name_Date[i][2]
-#         start = Name_Date[i][0]
-#         end = Name_Date[i][1]
-#
-#         # closePrice = GetClosePrice(mySqlDBLocal, contract, start, end)
-#         correlationTable, corr = CorrelationTable(mySqlDBLocal, '持买仓量', Companys, contract, start, end)
-#         # PlotCompare(correlationTable, closePrice, contract)
-#         L.append(corr)
+if __name__ == '__main__':
+    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+    mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
+                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    Company = ['永安期货']
+    ContractName = 'RB.SHF'
+    StartDate = '2017-01-01'
+    EndDate = '2018-12-31'
+    CutDate = '2017-01-01'
+    Dates = Mysql_GetDates(mySqlDBLocal, StartDate, EndDate)
+    Dates.index = pd.to_datetime(Dates['Dates'])
+    # DayInterval = 1
+    # Name_Date = Get_Contracts(mySqlDBReader, ContractName, StartDate, EndDate)
+    # L = []
+    # for i in range(len(Name_Date)):
+    #     contract = Name_Date[i][2]
+    #     start = Name_Date[i][0]
+    #     end = Name_Date[i][1]
+    #
+    #     # closePrice = GetClosePrice(mySqlDBLocal, contract, start, end)
+    #     correlationTable = CorrelationTable(mySqlDBLocal, '持买仓量', Company, contract, start, end)
+    #     # PlotCompare(correlationTable, closePrice, contract)
+    #     L.append(correlationTable)
 #     ans = MakeCorrTable(L)
 #     print(ans)
+#     yn01 = Mysql_GetBuyOI(mySqlDBLocal, '永安期货','rb1701')
+    # yn05 = Mysql_GetBuyOI(mySqlDBLocal, '永安期货','rb1705')
+    # yn09 = Mysql_GetBuyOI(mySqlDBLocal, '永安期货','rb1710')
+    # print(Mysql_GetRankTopNmaes(mySqlDBReader,'2018-12-04' ,'rb1901' ,5))
+    # mySqlDBLocal.Close()
+    # mySqlDBReader.Close()
