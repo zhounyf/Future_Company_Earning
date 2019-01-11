@@ -45,10 +45,10 @@ def CompanyOITableList(mySqlDB, company, start, end, proLog=None, isLog=False):
 def main():
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-    mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
-                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
-    MySql_CreateTable_SeveralEarning(mySqlDBLocal)
-
+    # mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
+    #                            mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    # MySql_CreateTable_SeveralEarning(mySqlDBLocal)
+    MySql_CreateTable_RankEarning(mySqlDBLocal)
     # MySql_CreateTable_ComanpyList(mySqlDBLocal)
     # MySql_CreateTable_EarningTable(mySqlDBLocal)
     # start = datetime.now()
@@ -72,8 +72,4 @@ def main():
 
 
 if __name__ == '__main__':
-    mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
-                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
-    ans = runtimeR(get_largedata,mySqlDBReader)
-    # ans.insert(0, 0, value=ans.index.values)
-    print(ans)
+    main()

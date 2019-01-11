@@ -110,6 +110,48 @@ def MySql_CreateTable_SeveralEarning(mySqlDB):
     except Exception as e:
         raise e
 
+def MySql_CreateTable_RankEarning(mySqlDB):
+    """
+    创建“最终计算用的包含价格的期货持仓表” "测试用"
+    :param mySqlDB:localhost
+    """
+    try:
+        mySqlDB.Sql("""
+        CREATE TABLE `rankearning` (
+          `期货品种` varchar(6) DEFAULT NULL,
+          `日期` date DEFAULT NULL,
+          `开盘价` float DEFAULT NULL,
+          `最高价` float DEFAULT NULL,
+          `最低价` float DEFAULT NULL,
+          `收盘价` float DEFAULT NULL,
+          `合约持仓量` float DEFAULT NULL,
+          `limit1` float DEFAULT NULL,
+          `limit2` float DEFAULT NULL,
+          `limit3` float DEFAULT NULL,
+          `limit4` float DEFAULT NULL,
+          `limit5` float DEFAULT NULL,
+          `limit6` float DEFAULT NULL,
+          `limit7` float DEFAULT NULL,
+          `limit8` float DEFAULT NULL,
+          `limit9` float DEFAULT NULL,
+          `limit10` float DEFAULT NULL,
+          `limit11`  float DEFAULT NULL,
+          `limit12` float DEFAULT NULL,
+          `limit13` float DEFAULT NULL,
+          `limit14` float DEFAULT NULL,
+          `limit15` float DEFAULT NULL,
+          `limit16` float DEFAULT NULL,
+          `limit17` float DEFAULT NULL,
+          `limit18` float DEFAULT NULL,
+          `limit19` float DEFAULT NULL,
+          `limit20` float DEFAULT NULL,
+          KEY `idx_rankearning_日期` (`日期`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """)
+
+    except Exception as e:
+        raise e
+
 
 def MySql_BatchInsertCompanylist(mySqlDB, values, proLog=None, isLog=False):
     """
@@ -174,6 +216,29 @@ def MySql_BatchInsertSeveralEarning(mySqlDB, values, proLog=None, isLog=False):
                 proLog.Log('Table texchangefutureday BatchInsert Nothing')
     except Exception as e:
         raise e
+
+
+def MySql_BatchInsertRankEarning(mySqlDB, values, proLog=None, isLog=False):
+    """
+    将数据批量加入“期货公司单品种当日盈亏表”
+    :param mySqlDB: localhost
+    :param values: np.ndarray
+    """
+    try:
+        if len(values) > 0:
+            mySqlDB.Sqls('''
+            insert into rankearning(期货品种,日期,开盘价, 最高价,最低价, 收盘价,合约持仓量,
+            limit1,limit2,limit3,limit4,limit5,limit6,limit7,limit8,limit9,limit10,
+            limit11,limit12,limit13,limit14,limit15,limit16,limit17,limit18,limit19,limit20) 
+            values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
+            if (isLog and proLog != None):
+                proLog.Log('Table rankearning BatchInsert %d Successfully ' % len(values))
+        else:
+            if (isLog and proLog != None):
+                proLog.Log('Table rankearning BatchInsert Nothing')
+    except Exception as e:
+        raise e
+
 
 
 def Mysql_GetContractPrice(mySqlDB, date):
@@ -386,6 +451,7 @@ def Mysql_GetDates(mySqlDB, startdate, enddate):
     Dates = pd.DataFrame(list(results))
     Dates.columns = ['Dates']
     Dates['Dates'] = [i.strftime("%Y-%m-%d") for i in Dates['Dates']]
+    Dates.index = pd.to_datetime(Dates['Dates'])
     return Dates
 
 
@@ -476,15 +542,26 @@ def Mysql_GetBuyOIIndex(mySqlDB, contractname, start, end):
     :param end:
     :return:
     """
-    contractname = contractname.split('.')[0] + '9999'
-    sql = 'SELECT `FTradeDay`,`FOpenInst`,`FOpen`,`FHigh`,`FLow`,`FClose` FROM `stfutureday` WHERE `FRealContract` = "{contractname}"  AND `FTradeDay` BETWEEN "{start}" AND "{end}"' \
-          ''.format(contractname=contractname, start=start, end=end)
+    contractname2 = contractname.split('.')[0] + '9999'
+    sql = 'SELECT `FTradeDay`,`FOpen`,`FHigh`,`FLow`,`FClose`,`FOpenInst` FROM `stfutureday` WHERE `FRealContract` = "{contractname}"  AND `FTradeDay` BETWEEN "{start}" AND "{end}"' \
+          ''.format(contractname=contractname2, start=start, end=end)
     results = mySqlDB.GetResults(sql)
     ans = pd.DataFrame(list(results))
-    ans.columns = ['日期', '持买仓量', '开盘价', '最高价', '最低价', '收盘价']
-    # ans['日期'] = [i.strftime("%Y-%m-%d") for i in ans['日期']]
+    ans.columns = ['日期', '开盘价', '最高价', '最低价', '收盘价', '持买仓量']
     ans.index = pd.to_datetime(ans['日期'])
-    del ans['日期']
-    ans[['持买仓量', '开盘价', '最高价', '最低价', '收盘价']] = \
-        ans[['持买仓量', '开盘价', '最高价', '最低价', '收盘价']].applymap(lambda x: round(x))
+    ans[['开盘价', '最高价', '最低价', '收盘价', '持买仓量']] = \
+        ans[['开盘价', '最高价', '最低价', '收盘价', '持买仓量']].applymap(lambda x: round(x))
+    ans.insert(0, '期货品种', contractname.split('.')[0])
+    ans['日期'] = [i.strftime("%Y-%m-%d") for i in ans['日期']]
+    return ans
+
+
+def Mysql_GetRankLimit(mySqlDB,contractname,start,end,limit):
+    sql = 'SELECT `期货品种`,`日期`,`开盘价`,`最高价`,`最低价`,`收盘价`,`合约持仓量`,{limit} FROM `rankearning` ' \
+          'WHERE `日期` BETWEEN "{start}" AND "{end}" ORDER BY `日期` ASC'.format(limit=limit, start=start, end=end)
+    results = mySqlDB.GetResults(sql)
+    ans = pd.DataFrame(list(results))
+    ans.columns = ['期货品种','日期','开盘价','最高价','最低价','收盘价','合约持仓量',limit]
+    ans['日期'] = [pd.datetime.strftime(x, '%Y-%m-%d') for x in ans['日期']]
+    ans.index = pd.to_datetime(ans['日期'])
     return ans

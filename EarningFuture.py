@@ -324,4 +324,13 @@ def main(mySqlDB, contractName, company, StartDate, EndDate, CutDate, shift):
 
 
 
-
+if __name__ == '__main__':
+    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+    ContractName = 'RB.SHF'
+    StartDate = '2015-01-01'
+    EndDate = '2016-12-31'
+    CutDate = '2016-01-01'
+    company = '永安期货'
+    shift = 5
+    temp = main(mySqlDBLocal,ContractName,StartDate,EndDate,CutDate,shift)

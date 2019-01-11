@@ -2,6 +2,7 @@ from ProPackage.LangMySQL import *
 from ProPackage.ProConfig import *
 from ProPackage.ProMySqlDB import ProMySqlDB
 from ProPackage.ProTool import *
+from EarningFutureRank import *
 from EarningFuture import *
 import os
 
@@ -125,6 +126,24 @@ def MakeEarningTables(mySqlDB, mySqlDB2, companys, multipliertable, startdate):
             except (ValueError, KeyError):
                 print("%s,%s is wrong!" % (company, contract[0]))
                 pass
+
+def MakeRankeEarningTables(mySqlDB,contractName,start,end):
+    """
+    将某品种的指数持仓量，指数价格(成交量加权)，以及前20排名按各种累计排名合计的持仓量导入earningtabledb.rankearning
+    :param mySqlDB:
+    :param contractName:
+    :param start:
+    :param end:
+    :return:
+    """
+    Dates = Mysql_GetDates(mySqlDB, start, end)
+    PriceTable = Mysql_GetBuyOIIndex(mySqlDB, contractName, start, end)
+    for i in range(1, 21):
+        r = MakeRankTable(mySqlDB, Dates, contractName, i)
+        PriceTable['limit' + str(i)] = r['limit']
+    values = frameToTuple(PriceTable)
+    MySql_BatchInsertRankEarning(mySqlDBLocal, values)
+
 
 
 if __name__ == '__main__':
