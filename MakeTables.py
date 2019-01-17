@@ -146,14 +146,14 @@ def MakeRankeEarningTables(mySqlDB,contractName,start,end):
 
 
 
-if __name__ == '__main__':
-    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
-                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-    mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
-                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
-    # Mysql_CheckCompanylistDate(mySqlDBLocal)
-    # MakeCompanyList(mySqlDBLocal, mySqlDBReader, Companys, '2018-12-19', '2019-01-03')
-    # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable, '2018-12-19')
-
-    mySqlDBReader.Close()
-    mySqlDBLocal.Close()
+# if __name__ == '__main__':
+#     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+#                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+#     mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
+#                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+#     # Mysql_CheckCompanylistDate(mySqlDBLocal)
+#     # MakeCompanyList(mySqlDBLocal, mySqlDBReader, Companys, '2018-12-19', '2019-01-03')
+#     # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable, '2018-12-19')
+#
+#     mySqlDBReader.Close()
+#     mySqlDBLocal.Close()

@@ -153,6 +153,46 @@ def MySql_CreateTable_RankEarning(mySqlDB):
         raise e
 
 
+def MySql_CreateTable_RankEarningAnswer(mySqlDB):
+    """
+    创建“最终计算用的包含价格的期货持仓表” "测试用"
+    :param mySqlDB:localhost
+    """
+    try:
+        mySqlDB.Sql("""
+        CREATE TABLE `rankearninganswer` (
+          `区间左值` varchar(8) DEFAULT NULL,
+          `总盈亏` float DEFAULT NULL,
+          `持有天数` int(1) DEFAULT NULL,
+          `交易次数` int(1) DEFAULT NULL,
+          `前多少排名` int(1) DEFAULT NULL,
+          `观察天数`int(1) DEFAULT NULL,
+          `训练开始日期` date DEFAULT NULL,
+          `训练结束日期` date DEFAULT NULL,
+          `测试开始日期` date DEFAULT NULL,
+          `测试结束日期` date DEFAULT NULL
+          # KEY `idx_rankearning_日期` (`日期`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+        """)
+
+    except Exception as e:
+        raise e
+
+
+def MySql_BatchInsertRankEarningAnswer(mySqlDB, values, proLog=None, isLog=False):
+    try:
+        if len(values) > 0:
+            mySqlDB.Sqls("""
+             INSERT INTO `rankearninganswer`(`区间左值`,`总盈亏`,`持有天数`,`交易次数`,`前多少排名`,`观察天数`,
+             `训练开始日期`,`训练结束日期`,`测试开始日期`,`测试结束日期`) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",values)
+            if (isLog and proLog != None):
+                proLog.Log('Table rankearninganswer BatchInsert %d Successfully ' % len(values))
+        else:
+            if (isLog and proLog != None):
+                proLog.Log('Table rankearninganswer BatchInsert Nothing')
+    except Exception as e:
+        raise e
+
 def MySql_BatchInsertCompanylist(mySqlDB, values, proLog=None, isLog=False):
     """
     将数据批量加入“期货公司单品种当日盈亏表”
@@ -166,10 +206,10 @@ def MySql_BatchInsertCompanylist(mySqlDB, values, proLog=None, isLog=False):
             期货品种) 
             values (%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
             if (isLog and proLog != None):
-                proLog.Log('Table texchangefutureday BatchInsert %d Successfully ' % len(values))
+                proLog.Log('Table companylist BatchInsert %d Successfully ' % len(values))
         else:
             if (isLog and proLog != None):
-                proLog.Log('Table texchangefutureday BatchInsert Nothing')
+                proLog.Log('Table companylist BatchInsert Nothing')
     except Exception as e:
         raise e
 
@@ -188,10 +228,10 @@ def MySql_BatchInsertEarningTable(mySqlDB, values, proLog=None, isLog=False):
                   最低价, 收盘价, 当日结算价, 净持仓, 净持仓变动, 当日盈亏) 
             values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
             if isLog and proLog is not None:
-                proLog.Log('Table texchangefutureday BatchInsert %d Successfully ' % len(values))
+                proLog.Log('Table earningtabletest BatchInsert %d Successfully ' % len(values))
         else:
             if isLog and proLog is not None:
-                proLog.Log('Table texchangefutureday BatchInsert Nothing')
+                proLog.Log('Table earningtabletest BatchInsert Nothing')
     except Exception as e:
         raise e
 
@@ -210,10 +250,10 @@ def MySql_BatchInsertSeveralEarning(mySqlDB, values, proLog=None, isLog=False):
                   交易盈亏, 累计持仓盈亏,总盈亏) 
             values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)''', values)
             if isLog and proLog is not None:
-                proLog.Log('Table texchangefutureday BatchInsert %d Successfully ' % len(values))
+                proLog.Log('Table severalearning BatchInsert %d Successfully ' % len(values))
         else:
             if isLog and proLog is not None:
-                proLog.Log('Table texchangefutureday BatchInsert Nothing')
+                proLog.Log('Table severalearning BatchInsert Nothing')
     except Exception as e:
         raise e
 
@@ -557,6 +597,13 @@ def Mysql_GetBuyOIIndex(mySqlDB, contractname, start, end):
 
 
 def Mysql_GetRankLimit(mySqlDB,contractname,start,end,limit):
+    """
+    获得前limit排名的价格持仓数据
+    :param mySqlDB:
+    :param contractname: 'RB'
+    :param limit: 'limit5'
+    :return:
+    """
     sql = 'SELECT `期货品种`,`日期`,`开盘价`,`最高价`,`最低价`,`收盘价`,`合约持仓量`,{limit} FROM `rankearning` ' \
           'WHERE `日期` BETWEEN "{start}" AND "{end}" ORDER BY `日期` ASC'.format(limit=limit, start=start, end=end)
     results = mySqlDB.GetResults(sql)

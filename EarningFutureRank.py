@@ -6,6 +6,7 @@ from ProPackage.ProConfig import *
 from ProPackage.ProTool import *
 from EarningSimilarCompanys import Get_Contracts
 import numpy as np
+import re
 import matplotlib.pyplot as plt
 from pylab import mpl
 
@@ -42,20 +43,20 @@ def MakeRankTable(mysqlDB, dates, contractname, limit):
     :return:
     """
     L = []
-    for date in Dates['Dates']:
+    for date in dates['Dates']:
         temp = Mysql_GetRankTopNmaes(mysqlDB, date, contractname, limit)
         L.append(temp[:, 1].astype(int).sum())
     dates['limit'] = L
     return dates
 
 
-def MakeRollingRationkind(contracttable, shifts):
+def MakeRollingRationkind(contracttable, shifts,limit):
     """
     根据不同间隔天数计算出的多头变化占比值
     :param table: Mysql_GetRankLimit
     :return: shift后的多头变化占比
     """
-    contracttable = contracttable.rename(columns={'limit5': '持买仓量'})
+    contracttable = contracttable.rename(columns={limit: '持买仓量'})
     contracttable['持买增减量'] = contracttable['持买仓量'].diff().fillna(1)
     contracttable['多头占比'] = contracttable['持买仓量'] / contracttable['合约持仓量']
     table = contracttable.copy()
@@ -103,6 +104,7 @@ def MakeEarningTableSeveralDay(table, days, multiplierTable):
             temp = MakeEarningTableOneDay(table, ratio, day, multiplierTable)
             T.append(temp)
     ansTable = pd.concat(T)
+    ansTable = ansTable.sort_values('日期')
     return ansTable
 
 
@@ -165,9 +167,9 @@ def TrainBuyMean(traintable):
     return TrainBuy, Marked, Values
 
 
-def MakeEarningDateTable(table, Dates):
+def MakeEarningDateTable(table, Dates,endDate):
     """
-    用开仓前日期和持有天数推算盈利日期。
+    用开仓前日期和持有天数推算盈利日期，去掉超过测试
     :param table:
     :param Dates:
     :return:
@@ -184,7 +186,83 @@ def MakeEarningDateTable(table, Dates):
             newdays.append('-1')
             pass
     table['盈利日期'] = newdays
+    table = table[table['盈利日期'] < endDate]
     return table
+
+def selectEarning(testbuy, values, dates,enddate):
+    """
+    :param table: testEarning
+    :return: res(train表中(天数，占比)在test表中对应的数据;counts(res的统计表)
+    """
+    testbuy = MakeEarningDateTable(testbuy, dates,enddate)
+    testbuy2 = testbuy[['日期', '盈利日期', '持有天数', '多头变化占比', '交易盈亏', '累计持仓盈亏', '总盈亏']]
+    days = testbuy2['日期'].drop_duplicates().values
+    L = []
+    for day in days:
+        testoneday = testbuy2[testbuy2['日期'] == day]
+        ratio = testoneday['多头变化占比'].iloc[0]
+        if ratio in values[:, 0]:
+            tempday = values[values[:, 0] == ratio][:, 1][0]
+            l = testoneday[testoneday['持有天数'] == tempday]
+            L.append(l)
+    if len(L) > 0:
+        res = pd.concat(L)
+        res = res[res['盈利日期'] != "-1"]
+        res.index = pd.to_datetime(res['盈利日期'])
+        res['累计盈亏'] = res['总盈亏'].cumsum()
+        earning = res.pivot_table(index='多头变化占比', values='总盈亏', aggfunc=np.sum)
+        counts = pd.concat(
+            [earning, res[['多头变化占比', '持有天数']].drop_duplicates().set_index('多头变化占比'), res['多头变化占比'].value_counts()], axis=1)
+        counts = counts.rename(columns={'持有天数': '持有天数', '多头变化占比': '交易次数'})
+        row = counts.apply(func={'总盈亏': sum, '持有天数': np.mean, '交易次数': sum}).apply(round).rename('Describe')
+        counts = pd.concat([counts, pd.DataFrame(row).T])
+        return res, counts
+    else:
+        print("没有对应情况")
+        return None, None
+
+
+def TotalOperate(mySqlDB,trainstart,trainend,teststart,testend,contractname,limit,shifts):
+    TrainStartDate = pd.datetime.strptime(trainstart, "%Y-%m-%d") + pd.Timedelta("-20 days")
+    TrainDate = pd.datetime.strftime(TrainStartDate, "%Y-%m-%d")
+    TestStartDate = pd.datetime.strptime(teststart, "%Y-%m-%d") + pd.Timedelta("-20 days")
+    TestDate = pd.datetime.strftime(TestStartDate, "%Y-%m-%d")
+
+    TrainTable = Mysql_GetRankLimit(mySqlDB, contractname.split(".")[0], TrainDate, trainend, limit)
+    TrainTable = TrainTable[trainstart:trainend]
+    TrainRationTable = MakeRollingRationkind(TrainTable, shifts,limit)
+
+    TestTable = Mysql_GetRankLimit(mySqlDB, contractname.split(".")[0], TestDate, testend, limit)
+    TestTable = TestTable[teststart:testend]
+    TestRationTable = MakeRollingRationkind(TestTable, shifts,limit)
+
+    TrainTableEarning = MakeEarningTableSeveralDay(TrainRationTable, 16, MultiplierTable)
+    TrainTableEarning.index = pd.to_datetime(TrainTableEarning['日期'])
+    trainEarning = TrainTableEarning[trainstart:trainend]
+
+    TestTableEarning = MakeEarningTableSeveralDay(TestRationTable, 16, MultiplierTable)
+    TestTableEarning.index = pd.to_datetime(TestTableEarning['日期'])
+    testEarning = TestTableEarning[teststart:testend]
+
+    TrainBuy, Marked, Values = TrainBuyMean(MakeDaysEarning(trainEarning))
+    Dates = Mysql_GetDates(mySqlDB, trainstart, testend)
+    res, counts = selectEarning(testEarning, Values, Dates, testend)
+    counts.insert(0, 'left', counts.index)
+    counts['前多少排名'] = ''.join(re.findall(r'[0-9]',limit))
+    counts['观察天数'] = shifts
+    counts['训练开始日期'] = trainstart
+    counts['训练结束日期'] = trainend
+    counts['测试开始日期'] = teststart
+    counts['测试结束日期'] = testend
+    valus = frameToTuple(counts)
+    MySql_BatchInsertRankEarningAnswer(mySqlDBLocal,valus)
+    print("Insert Done")
+    # return  valus
+
+
+
+
+
 
 
 if __name__ == '__main__':
@@ -192,13 +270,16 @@ if __name__ == '__main__':
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
 
     ContractName = 'RB.SHF'
-    StartDate = '2010-01-01'
-    EndDate = '2018-12-31'
-    CutDate = '2017-01-01'
-    Dates = Mysql_GetDates(mySqlDBLocal, StartDate, EndDate)
-    # Contracts = Mysql_GetMainContracts(mySqlDBLocal, ContractName, StartDate, EndDate)
+    TrainStart = '2016-01-01'
+    TrainEnd = '2016-12-31'
+    TestStart = '2017-01-01'
+    TestEnd = '2017-12-31'
+    Limits = []
+    for i in range(1, 21):
+        Limits.append('limit' + str(i))
 
-    # t1 = MakeIndexContract(mySqlDBLocal, '永安期货', Contracts, Dates)
+    for limit in Limits:
+        for shift in range(1,5):
+            TotalOperate(mySqlDBLocal,TrainStart,TrainEnd,TestStart,TestEnd,ContractName,limit,shift)
 
-    # r1 = Mysql_GetRankLimit(mySqlDBLocal,'RB','2015-01-01','2016-01-01','limit1')
-    # mySqlDBLocal.Close()
+    mySqlDBLocal.Close()
