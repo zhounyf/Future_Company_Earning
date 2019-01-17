@@ -42,7 +42,7 @@ def CompanyOITableList(mySqlDB, company, start, end, proLog=None, isLog=False):
         return ans
 
 
-def main():
+def TotalOperate():
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
     # mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
@@ -71,5 +71,5 @@ def main():
     # return table
 
 
-if __name__ == '__main__':
-    main()
+#if __name__ == '__main__':
+#    TotalOperate()
