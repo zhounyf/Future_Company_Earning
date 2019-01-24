@@ -4,5 +4,6 @@
 __pycache__/
 doc/
 ProPackage/ProConfig.py
+ProPackage/LangMySQL.py
 PowerBI/
 image/

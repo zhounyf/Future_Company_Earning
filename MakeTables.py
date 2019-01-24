@@ -142,18 +142,36 @@ def MakeRankeEarningTables(mySqlDB,contractName,start,end):
         r = MakeRankTable(mySqlDB, Dates, contractName, i)
         PriceTable['limit' + str(i)] = r['limit']
     values = frameToTuple(PriceTable)
-    MySql_BatchInsertRankEarning(mySqlDBLocal, values)
+    print(values[0])
+    # MySql_BatchInsertRankEarning(mySqlDBLocal, values)
 
 
+def UPdateTables(tablename):
+    engineLocal = getEnging(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+    engineReader = getEnging(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
+                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    sql = "SELECT * FROM `informationdb`.{tablename} WHERE `FDate` > '2019-01-08'".format(tablename = tablename)
+    table = pd.read_sql(sql,con=engineReader)
+    table.to_sql(tablename,con=engineLocal,if_exists='append',index=False)
+    Mysql_CheckDate(mySqlDBLocal,tablename)
 
-# if __name__ == '__main__':
-#     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
-#                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-#     mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
-#                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
-#     # Mysql_CheckCompanylistDate(mySqlDBLocal)
-#     # MakeCompanyList(mySqlDBLocal, mySqlDBReader, Companys, '2018-12-19', '2019-01-03')
-#     # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable, '2018-12-19')
+
+if __name__ == '__main__':
+    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+    # mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
+    #                            mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    # mySqlDBReaderInformation = ProMySqlDB(mySqlDBC_InformationDB_Name, mySqlDBC_User,
+    #                            mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+
+    # Mysql_CheckDate(mySqlDBLocal, 'rankearning')
+    # MakeCompanyList(mySqlDBLocal, mySqlDBReader, Companys, '2019-01-04', '2019-01-21')
+    # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable, '2019-01-04')
+    MakeRankeEarningTables(mySqlDBLocal,'RB.SHFE','2019-01-02', '2019-01-21')
+
+
+    # mySqlDBReaderInformation.Close()
+    # mySqlDBReader.Close()
+    mySqlDBLocal.Close()
 #
-#     mySqlDBReader.Close()
-#     mySqlDBLocal.Close()

@@ -13,7 +13,7 @@ from pylab import mpl
 mpl.rcParams['font.sans-serif'] = ['SimHei']
 mpl.rcParams['axes.unicode_minus'] = False
 pd.set_option('mode.chained_assignment', None)
-pd.set_option('mode.chained_assignment', None)
+
 
 
 def MakeIndexContract(mysqlDB, company, contracts, dates):
@@ -212,7 +212,8 @@ def selectEarning(testbuy, values, dates,enddate):
         res['累计盈亏'] = res['总盈亏'].cumsum()
         earning = res.pivot_table(index='多头变化占比', values='总盈亏', aggfunc=np.sum)
         counts = pd.concat(
-            [earning, res[['多头变化占比', '持有天数']].drop_duplicates().set_index('多头变化占比'), res['多头变化占比'].value_counts()], axis=1)
+            [earning, res[['多头变化占比', '持有天数']].drop_duplicates().set_index('多头变化占比'),
+             res['多头变化占比'].value_counts()], axis=1)
         counts = counts.rename(columns={'持有天数': '持有天数', '多头变化占比': '交易次数'})
         row = counts.apply(func={'总盈亏': sum, '持有天数': np.mean, '交易次数': sum}).apply(round).rename('Describe')
         counts = pd.concat([counts, pd.DataFrame(row).T])
@@ -247,39 +248,79 @@ def TotalOperate(mySqlDB,trainstart,trainend,teststart,testend,contractname,limi
     TrainBuy, Marked, Values = TrainBuyMean(MakeDaysEarning(trainEarning))
     Dates = Mysql_GetDates(mySqlDB, trainstart, testend)
     res, counts = selectEarning(testEarning, Values, Dates, testend)
-    counts.insert(0, 'left', counts.index)
-    counts['前多少排名'] = ''.join(re.findall(r'[0-9]',limit))
-    counts['观察天数'] = shifts
-    counts['训练开始日期'] = trainstart
-    counts['训练结束日期'] = trainend
-    counts['测试开始日期'] = teststart
-    counts['测试结束日期'] = testend
-    valus = frameToTuple(counts)
-    MySql_BatchInsertRankEarningAnswer(mySqlDBLocal,valus)
-    print("Insert Done")
-    # return  valus
+    if counts is not None:
+        counts.insert(0, 'left', counts.index)
+        counts['前多少排名'] = ''.join(re.findall(r'[0-9]',limit))
+        counts['观察天数'] = shifts
+        counts['训练开始日期'] = trainstart
+        counts['训练结束日期'] = trainend
+        counts['测试开始日期'] = teststart
+        counts['测试结束日期'] = testend
+        valus = frameToTuple(counts)
+        MySql_BatchInsertRankEarningAnswer(mySqlDBLocal,valus)
+        print("{limit},{shifts} Insert Done".format(limit=limit,shifts = shifts))
 
 
-
-
-
-
-
-if __name__ == '__main__':
-    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
-                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-
-    ContractName = 'RB.SHF'
-    TrainStart = '2016-01-01'
-    TrainEnd = '2016-12-31'
-    TestStart = '2017-01-01'
-    TestEnd = '2017-12-31'
+def AnswerTest(traintable,mysqlDB,contarctname,TestStart,TestEnd):
+    """
+    traintable AnalysisFutureRank中得出的结论，与test日期内的数据比较
+    :param traintable:
+    :param mysqlDB:
+    :param contarctname:
+    :param TestStart:
+    :param TestEnd:
+    :return:
+    """
+    T = []
     Limits = []
     for i in range(1, 21):
         Limits.append('limit' + str(i))
-
     for limit in Limits:
-        for shift in range(1,5):
-            TotalOperate(mySqlDBLocal,TrainStart,TrainEnd,TestStart,TestEnd,ContractName,limit,shift)
+        for shift in range(1, 6):
+            # TotalOperate(mySqlDBLocal,TrainStart,TrainEnd,TestStart,TestEnd,ContractName,limit,shift)
+            TrainStartDate = pd.datetime.strptime(TestStart, "%Y-%m-%d") + pd.Timedelta("-20 days")
+            TrainDate = pd.datetime.strftime(TrainStartDate, "%Y-%m-%d")
+            TrainTable = Mysql_GetRankLimit(mysqlDB, contarctname.split(".")[0], TrainDate, TestEnd, limit)
+            TrainRationTable = MakeRollingRationkind(TrainTable, 1, limit)
+            TrainRationTable = TrainRationTable[TestStart:TestEnd]
+            TrainTableEarning = MakeEarningTableSeveralDay(TrainRationTable, 16, MultiplierTable)
+            TrainTableEarning.index = pd.to_datetime(TrainTableEarning['日期'])
+            Dates = Mysql_GetDates(mysqlDB, TestStart, TestEnd)
+            TrainTableEarning = MakeEarningDateTable(TrainTableEarning, Dates, TestEnd)
+            TrainTableEarning['前多少排名'] = int(limit.split('t')[1])
+            TrainTableEarning['观察天数'] = int(shift)
+            T.append(TrainTableEarning)
 
-    mySqlDBLocal.Close()
+    traintable['Answer'] = traintable['观察天数'].astype('str') + '_' + traintable['区间左值'].astype('str') + '_' + \
+                           traintable['持有天数'].astype('str') + '_' + traintable['前多少排名'].astype('str')
+    t = pd.concat(T)
+    t['Answer'] = t['观察天数'].astype('str') + '_' + t['多头变化占比'].astype('str') + '_' \
+                  + t['持有天数'].astype('str') + '_' + t['前多少排名'].astype('str')
+
+    temp = []
+    for i in traintable['Answer'].values:
+        temp.append(t[t['Answer'] == i])
+
+    return pd.concat(temp)
+
+
+# if __name__ == '__main__':
+#     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+#                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+#
+#     ContractName = 'RB.SHF'
+#     TrainStart = '2016-01-01'
+#     TrainEnd = '2017-12-31'
+#     TestStart = '2019-01-01'
+#     TestEnd = '2019-01-21'
+#
+#     # T = []
+#     # Limits = []
+#     # for i in range(1, 21):
+#     #     Limits.append('limit' + str(i))
+#     # for limit in Limits:
+#     #     for shift in range(1,6):
+#     #         #计算RankEarningAnswer
+#     #         TotalOperate(mySqlDBLocal,TrainStart,TrainEnd,TestStart,TestEnd,ContractName,limit,shift)
+#
+#     mySqlDBLocal.Close()

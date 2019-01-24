@@ -48,7 +48,7 @@ def main():
     # mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
     #                            mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
     # MySql_CreateTable_SeveralEarning(mySqlDBLocal)
-    MySql_CreateTable_RankEarningAnswer(mySqlDBLocal)
+    # MySql_CreateTable_RankEarningAnswer(mySqlDBLocal)
     # MySql_CreateTable_ComanpyList(mySqlDBLocal)
     # MySql_CreateTable_EarningTable(mySqlDBLocal)
     # start = datetime.now()
@@ -69,7 +69,3 @@ def main():
     # print("行数： %d" % len(table))
     #
     # return table
-
-
-if __name__ == '__main__':
-    main()

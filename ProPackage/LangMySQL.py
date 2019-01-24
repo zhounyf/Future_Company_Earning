@@ -5,8 +5,10 @@ Created on Tue Oct 23 09:35:51 2018
 @author: zhoun
 """
 import pandas as pd
+from ProPackage.ProConfig import *
 import re
 import os
+
 
 
 def MySql_CreateTable_Companylist(mySqlDB):
@@ -280,6 +282,21 @@ def MySql_BatchInsertRankEarning(mySqlDB, values, proLog=None, isLog=False):
         raise e
 
 
+def MySql_BatchInsertStfuture(mySqlDB, values, proLog=None, isLog=False):
+    try:
+        if len(values) > 0:
+            mySqlDB.Sqls("""
+             INSERT INTO stfutureday(FID,FRealContract,FTradeDay,FOpen,FHigh,FLow,FClose,FVol,
+             FOpenInst,FAmount,FFloatMoney,FSettle,FSeq,FOffset,FFlag) 
+             values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",values)
+            if (isLog and proLog != None):
+                proLog.Log('Table stfutureday BatchInsert %d Successfully ' % len(values))
+        else:
+            if (isLog and proLog != None):
+                proLog.Log('Table stfutureday BatchInsert Nothing')
+    except Exception as e:
+        raise e
+
 
 def Mysql_GetContractPrice(mySqlDB, date):
     """
@@ -495,15 +512,19 @@ def Mysql_GetDates(mySqlDB, startdate, enddate):
     return Dates
 
 
-def Mysql_CheckCompanylistDate(mySqlDB):
+def Mysql_CheckDate(mySqlDB,tablename):
     """
     查询Companylist表中最新的日期
     :param mySqlDB:
     :return:
     """
-    sql = 'select 日期 from companylist order by 日期 desc limit 1'
+    Date={'companylist':'日期','earningtabletest':'日期','rankearning':'日期',
+          'texchangefutureday':'FDate','texchangefuturerank':'FDate','stfutureday':'FTradeDay'}
+    sql = 'select {date} from {tablename} order by {date} desc limit 1'.format(
+        tablename = tablename,date = Date[tablename])
     results = mySqlDB.GetResults(sql)
-    print("companylist表中截至日期为：%s" % pd.datetime.strftime(results[0][0], '%Y-%m-%d'))
+    print("{tablename}表中截至日期为：{date}".format(tablename = tablename,
+                                             date = pd.datetime.strftime(results[0][0], '%Y-%m-%d')))
 
 
 def Mysql_CheckSeveralearningDate(mySqlDB):
@@ -583,7 +604,8 @@ def Mysql_GetBuyOIIndex(mySqlDB, contractname, start, end):
     :return:
     """
     contractname2 = contractname.split('.')[0] + '9999'
-    sql = 'SELECT `FTradeDay`,`FOpen`,`FHigh`,`FLow`,`FClose`,`FOpenInst` FROM `stfutureday` WHERE `FRealContract` = "{contractname}"  AND `FTradeDay` BETWEEN "{start}" AND "{end}"' \
+    sql = 'SELECT `FTradeDay`,`FOpen`,`FHigh`,`FLow`,`FClose`,`FOpenInst` FROM `stfutureday` WHERE `FRealContract` = ' \
+          '"{contractname}"  AND `FTradeDay` BETWEEN "{start}" AND "{end}" ORDER BY `FTradeDay`' \
           ''.format(contractname=contractname2, start=start, end=end)
     results = mySqlDB.GetResults(sql)
     ans = pd.DataFrame(list(results))
@@ -612,3 +634,36 @@ def Mysql_GetRankLimit(mySqlDB,contractname,start,end,limit):
     ans['日期'] = [pd.datetime.strftime(x, '%Y-%m-%d') for x in ans['日期']]
     ans.index = pd.to_datetime(ans['日期'])
     return ans
+
+
+def Mysql_GetRankEarningAnswer(mySqlDB):
+    sql = 'SELECT * FROM `rankearninganswer` '
+    results = mySqlDB.GetResults(sql)
+    ans = pd.DataFrame(list(results))
+    ans.columns = ["区间左值","总盈亏","持有天数","交易次数","前多少排名",
+                   "观察天数","训练开始日期","训练结束日期","测试开始日期","测试结束日期"]
+    return ans
+
+
+def Mysql_CopyData(mySqlDB,tablename,start):
+    """
+
+    :param mySqlDB: reader
+    :param tablename:
+    :param start:
+    :return:
+    """
+    Date = {'stfutureday':'FTradeDay'}
+    sql = 'SELECT * FROM {tablename} WHERE {date} >= "{start}"'.format(tablename=tablename,
+                                                                       date=Date[tablename],start=start)
+    results = mySqlDB.GetResults(sql)
+    return results
+
+
+from sqlalchemy import create_engine
+
+def getEnging(db,user,password,host,port):
+    mysqlalchemy = 'mysql+pymysql://{user}:{password}@{host}:{port}/{db}?charset=' \
+                   'utf8'.format(user=user,password=password,host=host,port=port,db=db)
+    engine = create_engine(mysqlalchemy)
+    return engine
