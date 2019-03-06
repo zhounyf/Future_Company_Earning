@@ -9,11 +9,12 @@ import numpy as np
 import re
 import matplotlib.pyplot as plt
 from pylab import mpl
+import warnings
 
+warnings.simplefilter(action='ignore', category=FutureWarning)
 mpl.rcParams['font.sans-serif'] = ['SimHei']
 mpl.rcParams['axes.unicode_minus'] = False
 pd.set_option('mode.chained_assignment', None)
-
 
 
 def MakeIndexContract(mysqlDB, company, contracts, dates):
@@ -42,15 +43,17 @@ def MakeRankTable(mysqlDB, dates, contractname, limit):
     :param limit:
     :return:
     """
-    L = []
-    for date in dates['Dates']:
-        temp = Mysql_GetRankTopNmaes(mysqlDB, date, contractname, limit)
-        L.append(temp[:, 1].astype(int).sum())
-    dates['limit'] = L
+    dates['limit'] = pd.np.nan
+    for i in range(len(dates)):
+        temp = Mysql_GetRankTopNmaes(mysqlDB, dates.iloc[i,0], contractname, limit)
+        if len(temp) > 0:
+            # L.append(temp[:, 1].astype(int).sum())
+            dates.iloc[i,1] = temp[:, 1].astype(int).sum()
+    dates = dates.dropna()
     return dates
 
 
-def MakeRollingRationkind(contracttable, shifts,limit):
+def MakeRollingRationkind(contracttable, shifts, limit):
     """
     根据不同间隔天数计算出的多头变化占比值
     :param table: Mysql_GetRankLimit
@@ -167,7 +170,7 @@ def TrainBuyMean(traintable):
     return TrainBuy, Marked, Values
 
 
-def MakeEarningDateTable(table, Dates,endDate):
+def MakeEarningDateTable(table, Dates, endDate):
     """
     用开仓前日期和持有天数推算盈利日期，去掉超过测试
     :param table:
@@ -189,79 +192,115 @@ def MakeEarningDateTable(table, Dates,endDate):
     table = table[table['盈利日期'] < endDate]
     return table
 
-def selectEarning(testbuy, values, dates,enddate):
+
+def selectEarning(testbuy, values, dates, enddate):
     """
     :param table: testEarning
     :return: res(train表中(天数，占比)在test表中对应的数据;counts(res的统计表)
     """
-    testbuy = MakeEarningDateTable(testbuy, dates,enddate)
+    values = values[values[:, 0] > 0]
+    testbuy = MakeEarningDateTable(testbuy, dates, enddate)
     testbuy2 = testbuy[['日期', '盈利日期', '持有天数', '多头变化占比', '交易盈亏', '累计持仓盈亏', '总盈亏']]
     days = testbuy2['日期'].drop_duplicates().values
     L = []
     for day in days:
         testoneday = testbuy2[testbuy2['日期'] == day]
-        ratio = testoneday['多头变化占比'].iloc[0]
-        if ratio in values[:, 0]:
-            tempday = values[values[:, 0] == ratio][:, 1][0]
-            l = testoneday[testoneday['持有天数'] == tempday]
-            L.append(l)
+        ratios = testoneday['多头变化占比'].drop_duplicates().values
+        for ratio in ratios:
+            if ratio in values[:, 0]:
+                tempday = values[values[:, 0] == ratio][:, 1][0]
+                l = testoneday[testoneday['持有天数'] == tempday]
+                L.append(l)
     if len(L) > 0:
         res = pd.concat(L)
         res = res[res['盈利日期'] != "-1"]
-        res.index = pd.to_datetime(res['盈利日期'])
-        res['累计盈亏'] = res['总盈亏'].cumsum()
-        earning = res.pivot_table(index='多头变化占比', values='总盈亏', aggfunc=np.sum)
-        counts = pd.concat(
-            [earning, res[['多头变化占比', '持有天数']].drop_duplicates().set_index('多头变化占比'),
-             res['多头变化占比'].value_counts()], axis=1)
-        counts = counts.rename(columns={'持有天数': '持有天数', '多头变化占比': '交易次数'})
-        row = counts.apply(func={'总盈亏': sum, '持有天数': np.mean, '交易次数': sum}).apply(round).rename('Describe')
-        counts = pd.concat([counts, pd.DataFrame(row).T])
-        return res, counts
+        res = res[res['多头变化占比'] > 0]
+        if len(res) > 0:
+            res.index = pd.to_datetime(res['盈利日期'])
+            res['累计盈亏'] = res['总盈亏'].cumsum()
+            earning = res.pivot_table(index='多头变化占比', values='总盈亏', aggfunc=np.sum)
+            # if -0.0 in earning.index.values:
+            #     counts = pd.concat(
+            #         [earning.drop(-0, axis=0),
+            #          res[['多头变化占比', '持有天数']].drop_duplicates().set_index('多头变化占比').drop(-0, axis=0),
+            #          res['多头变化占比'].value_counts().drop(-0, axis=0)], axis=1)
+            # else:
+            try:
+                counts = pd.concat(
+                    [earning,res[['多头变化占比', '持有天数']].drop_duplicates().set_index('多头变化占比'),
+                     res['多头变化占比'].value_counts()], axis=1)
+            except ValueError:
+                print("value wrong")
+                return None, None
+            else:
+                counts = counts.rename(columns={'持有天数': '持有天数', '多头变化占比': '交易次数'})
+                if len(counts) > 0:
+                    row = counts.apply(func={'总盈亏': sum, '持有天数': np.mean, '交易次数': sum}).apply(round).rename('Describe')
+                    counts = pd.concat([counts, pd.DataFrame(row).T])
+                    return res, counts
+                else:
+                    print("counts is none")
+                    return None, None
+        else:
+            print("持有天数均未达到！")
+            return None, None
     else:
         print("没有对应情况")
         return None, None
 
 
-def TotalOperate(mySqlDB,trainstart,trainend,teststart,testend,contractname,limit,shifts):
+def TotalOperate(mySqlDB, trainstart, trainend, teststart, testend, contractname, limit, shifts, *company):
     TrainStartDate = pd.datetime.strptime(trainstart, "%Y-%m-%d") + pd.Timedelta("-20 days")
     TrainDate = pd.datetime.strftime(TrainStartDate, "%Y-%m-%d")
     TestStartDate = pd.datetime.strptime(teststart, "%Y-%m-%d") + pd.Timedelta("-20 days")
     TestDate = pd.datetime.strftime(TestStartDate, "%Y-%m-%d")
 
-    TrainTable = Mysql_GetRankLimit(mySqlDB, contractname.split(".")[0], TrainDate, trainend, limit)
-    TrainTable = TrainTable[trainstart:trainend]
-    TrainRationTable = MakeRollingRationkind(TrainTable, shifts,limit)
+    if len(company) == 0:
+        TrainTable = Mysql_GetRankLimit(mySqlDB, contractname.split(".")[0], TrainDate, trainend, limit)
+    else:
+        TrainTable = Mysql_GetOneCompanyRank(mySqlDB, contractname, company[0], TrainDate, trainend)
+    # TrainTable = TrainTable[trainstart:trainend]
+    if TrainTable is not None:
 
-    TestTable = Mysql_GetRankLimit(mySqlDB, contractname.split(".")[0], TestDate, testend, limit)
-    TestTable = TestTable[teststart:testend]
-    TestRationTable = MakeRollingRationkind(TestTable, shifts,limit)
+        TrainRationTable = MakeRollingRationkind(TrainTable, shifts, limit)
 
-    TrainTableEarning = MakeEarningTableSeveralDay(TrainRationTable, 16, MultiplierTable)
-    TrainTableEarning.index = pd.to_datetime(TrainTableEarning['日期'])
-    trainEarning = TrainTableEarning[trainstart:trainend]
+        if len(company) == 0:
+            TestTable = Mysql_GetRankLimit(mySqlDB, contractname.split(".")[0], TestDate, testend, limit)
+        else:
+            TestTable = Mysql_GetOneCompanyRank(mySqlDB, contractname, company[0], TestDate, testend)
+        # TestTable = TestTable[teststart:testend]
+        TestRationTable = MakeRollingRationkind(TestTable, shifts, limit)
 
-    TestTableEarning = MakeEarningTableSeveralDay(TestRationTable, 16, MultiplierTable)
-    TestTableEarning.index = pd.to_datetime(TestTableEarning['日期'])
-    testEarning = TestTableEarning[teststart:testend]
+        TrainTableEarning = MakeEarningTableSeveralDay(TrainRationTable, 16, MultiplierTable)
+        TrainTableEarning.index = pd.to_datetime(TrainTableEarning['日期'])
+        trainEarning = TrainTableEarning[trainstart:trainend]
 
-    TrainBuy, Marked, Values = TrainBuyMean(MakeDaysEarning(trainEarning))
-    Dates = Mysql_GetDates(mySqlDB, trainstart, testend)
-    res, counts = selectEarning(testEarning, Values, Dates, testend)
-    if counts is not None:
-        counts.insert(0, 'left', counts.index)
-        counts['前多少排名'] = ''.join(re.findall(r'[0-9]',limit))
-        counts['观察天数'] = shifts
-        counts['训练开始日期'] = trainstart
-        counts['训练结束日期'] = trainend
-        counts['测试开始日期'] = teststart
-        counts['测试结束日期'] = testend
-        valus = frameToTuple(counts)
-        MySql_BatchInsertRankEarningAnswer(mySqlDBLocal,valus)
-        print("{limit},{shifts} Insert Done".format(limit=limit,shifts = shifts))
+        TestTableEarning = MakeEarningTableSeveralDay(TestRationTable, 16, MultiplierTable)
+        TestTableEarning.index = pd.to_datetime(TestTableEarning['日期'])
+        testEarning = TestTableEarning[teststart:testend]
+
+        TrainBuy, Marked, Values = TrainBuyMean(MakeDaysEarning(trainEarning))
+        Dates = Mysql_GetDates(mySqlDB, trainstart, testend)
+        res, counts = selectEarning(testEarning, Values, Dates, testend)
+        if counts is not None:
+            counts.insert(0, 'left', counts.index)
+            counts['前多少排名'] = ''.join(re.findall(r'[0-9]', limit))
+            counts['观察天数'] = shifts
+            counts['训练开始日期'] = trainstart
+            counts['训练结束日期'] = trainend
+            counts['测试开始日期'] = teststart
+            counts['测试结束日期'] = testend
+            counts['品种'] = contractname.split(".")[0]
+            values = frameToTuple(counts)
+            # print(counts)
+            MySql_BatchInsertRankEarningAnswer(mySqlDB, values)
+            print("{name},{limit},{shifts} Insert Done".format(name=contractname.split(".")[0], limit=limit, shifts=shifts))
+
+    else:
+        print("{name} 没有数据".format(name=contractname.split(".")[0]))
 
 
-def AnswerTest(traintable,mysqlDB,contarctname,TestStart,TestEnd):
+def AnswerTest(traintable, mysqlDB, contarctname, TestStart, TestEnd):
     """
     traintable AnalysisFutureRank中得出的结论，与test日期内的数据比较
     :param traintable:
@@ -304,23 +343,138 @@ def AnswerTest(traintable,mysqlDB,contarctname,TestStart,TestEnd):
     return pd.concat(temp)
 
 
+def MakeEarningDateTable2(table, Dates, endDate, worstday):
+    """
+    用开仓前日期和持有天数推算盈利日期，去掉超过测试
+    :param table:
+    :param Dates:
+    :return:
+    """
+    Dates.index = range(len(Dates))
+    DatesV = Dates.values
+    tablebuyV = table[['持有天数', '日期']].values
+    newdays = []
+    for temp in tablebuyV:
+        if temp[1] not in worstday:
+            testdayindex = ''
+            for i in range(1, temp[0] + 1):
+                testdayindex = Dates[Dates['Dates'] == temp[1]].index + i
+                try:
+                    testday = DatesV[testdayindex][0][0]
+                    if testday in worstday:
+                        newdays.append(testday)
+                        break
+                    elif i == temp[0]:
+                        newdays.append(DatesV[testdayindex][0][0])
+                    else:
+                        continue
+                #                     newdays.append(testday)
+
+                except:
+                    newdays.append('-1')
+                    break
+
+        else:
+            newdays.append('-2')
+
+    table['盈利日期'] = newdays
+    table = table[table['盈利日期'] < endDate]
+    return table
+
+
 # if __name__ == '__main__':
 #     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
 #                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
 #
-#     ContractName = 'RB.SHF'
-#     TrainStart = '2016-01-01'
-#     TrainEnd = '2017-12-31'
-#     TestStart = '2019-01-01'
-#     TestEnd = '2019-01-21'
+#     # table = Mysql_GetTestDateGroup(mySqlDBLocal)
+#     datetable = pd.read_csv(".\doc\datetable.csv",names = ["TrainStart","TrainEnd","TestStart","TestEnd"])
+#     for ContractName in ["L.DCE"]:
+#         for i in range(0, len(datetable)):
+#             dates = datetable.iloc[i].values
+#             TrainStart, TrainEnd, TestStart, TestEnd = dates
+#             print(TrainStart, TrainEnd, TestStart, TestEnd)
 #
-#     # T = []
-#     # Limits = []
-#     # for i in range(1, 21):
-#     #     Limits.append('limit' + str(i))
-#     # for limit in Limits:
-#     #     for shift in range(1,6):
-#     #         #计算RankEarningAnswer
-#     #         TotalOperate(mySqlDBLocal,TrainStart,TrainEnd,TestStart,TestEnd,ContractName,limit,shift)
+#             # ans = TotalOperate(mySqlDBLocal, TrainStart, TrainEnd, TestStart, TestEnd, ContractName,'limit1', 1,'永安期货')
+#             # print(ans)
+#             T = []
+#             Limits = []
+#             for i in range(1, 21):
+#                 Limits.append('limit' + str(i))
+#             for limit in Limits:
+#                 for shift in range(1, 6):
+#             # for limit in ['limit12']:
+#             #     for shift in [3]:
 #
+#                     # 计算RankEarningAnswer
+#                     TotalOperate(mySqlDBLocal, TrainStart, TrainEnd, TestStart, TestEnd, ContractName, limit, shift)
+#     #
 #     mySqlDBLocal.Close()
+#     print(pd.datetime.now())
+
+# if __name__ == '__main__':
+#     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+#                                   mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+#     pricetable = Mysql_GetBuyOIIndex(mySqlDBLocal, 'RB.SHFE', '2018-01-01', '2018-12-31')
+#     table2018 = pd.read_csv('doc/table2018.csv', engine='python', index_col=0, parse_dates=True)
+#     table2018['日期'] = pd.to_datetime(table2018['日期']).apply(lambda x: pd.datetime.strftime(x, "%Y-%m-%d"))
+#     pricetable['MA'] = pricetable['结算价'].rolling(10).mean()
+#     pricetable['diff'] = pricetable['MA'].diff(4) / 4
+#     wrongdays = pricetable[pricetable['diff'] < -5]['日期'].values
+#     Dates = Mysql_GetDates(mySqlDBLocal, '2018-01-01', '2018-12-31')
+#     a = MakeEarningDateTable2(table2018, Dates, '2018-12-31',wrongdays)
+
+
+def StrategySignal():
+    j = 0
+    L = []
+    Dates = pd.read_csv('.\doc\Dates.csv').values
+    Names = os.listdir('.\doc\sign')
+    for name in Names:
+        t = pd.read_csv('.\doc\sign\{name}'.format(name=name),engine='python')
+        # FRealContract = t['期货品种'].iloc[0,0].lower()+'0000'
+        T = t[['日期', '持有天数','盈利日期','期货品种']]
+        for i in range(len(T)):
+            tempdate = T.iloc[i, 0]
+            tempindex = T.iloc[i, 1]
+            newindex = np.where(Dates == tempdate)[0][0] + tempindex
+            T.iloc[i, 2] = Dates[newindex][0]+ ' 20:58:00'
+            T.iloc[i, 0] = T.iloc[i, 0] + ' 20:58:00'
+        L.append(T)
+    Ans = pd.concat(L)
+    Ans.insert(1,'BUY','Buy')
+    Ans.insert(4, 'SELL', 'Sell')
+    return Ans
+
+def TransformSignal(ans):
+    Names = pd.read_csv("./doc/contracttype.csv", engine='python').values
+    Dict = {key:value for key,value in Names}
+
+    tempbuy = ans[['日期', 'BUY','期货品种']]
+    tempbuy = tempbuy.rename(columns={'日期': 'FSignalTime', 'BUY': 'FSide','期货品种':'FRealContract'})
+    tempbuy['FSignalDay'] = [i[:10] for i in tempbuy['FSignalTime']]
+    tempbuy['FStrategyName'] = ['FutureOIRankZYF0001'+ Dict[i]+'0000000000' for i in tempbuy['FRealContract']]
+    tempbuy['FRealContract'] =[ Dict[i] + '0000' for i in tempbuy['FRealContract']]
+
+    tempsell = ans[['盈利日期', 'SELL','期货品种']]
+    tempsell = tempsell.rename(columns={'盈利日期': 'FSignalTime', 'SELL': 'FSide','期货品种':'FRealContract'})
+    tempsell['FSignalDay'] = [i[:10] for i in tempsell['FSignalTime']]
+    tempsell['FStrategyName'] = ['FutureOIRankZYF0001'+ Dict[i]+'0000000000' for i in tempsell['FRealContract']]
+    tempsell['FRealContract'] = [ Dict[i] + '0000' for i in tempsell['FRealContract']]
+
+    temp = pd.concat([tempbuy,tempsell])
+    temp['FTradedVolume'] = 1
+    temp['FSpecificPrice'] = None
+    temp['FTradedDay'] = None
+    temp['FTradedPrice'] = None
+    return temp[['FStrategyName','FRealContract','FSide','FTradedVolume',
+                 'FSpecificPrice','FTradedDay','FTradedPrice','FSignalTime','FSignalDay']]
+
+
+if __name__ == '__main__':
+    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+
+    a = StrategySignal()
+    b = TransformSignal(a)
+    b.to_csv('FutureRankSignal.csv',encoding='GBK',index=None)
+    # print(table.iloc[0,:].split(' '))

@@ -138,40 +138,68 @@ def MakeRankeEarningTables(mySqlDB,contractName,start,end):
     """
     Dates = Mysql_GetDates(mySqlDB, start, end)
     PriceTable = Mysql_GetBuyOIIndex(mySqlDB, contractName, start, end)
-    for i in range(1, 21):
-        r = MakeRankTable(mySqlDB, Dates, contractName, i)
-        PriceTable['limit' + str(i)] = r['limit']
-    values = frameToTuple(PriceTable)
-    print(values[0])
-    # MySql_BatchInsertRankEarning(mySqlDBLocal, values)
+    # PriceTable = PriceTable['2016-02-15':]
+    del PriceTable['结算价']
+    if len(PriceTable) > 0:
+        Dates = Dates[PriceTable.index[0]:]
+        for i in range(1, 21):
+            r = MakeRankTable(mySqlDB, Dates, contractName, i)
+            PriceTable['limit' + str(i)] = r['limit']
+            print(contractName + "_"+'limit' + str(i)+ 'has done')
+        PriceTable = PriceTable.dropna(axis=0)
+        values = frameToTuple(PriceTable)
+        print(values[0])
+        MySql_BatchInsertRankEarning(mySqlDBLocal, values)
+        print(contractName+" has done  ")
 
 
-def UPdateTables(tablename):
+def UPdateTables(tablename,startdate):
     engineLocal = getEnging(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
     engineReader = getEnging(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
                                mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
-    sql = "SELECT * FROM `informationdb`.{tablename} WHERE `FDate` > '2019-01-08'".format(tablename = tablename)
+    if tablename == 'stfutureday':
+        sheet = 'quotationdb'
+        sql = "SELECT * FROM `{sheet}`.{tablename} WHERE `FTradeDay` >= '{date}'".format(tablename = tablename,date = startdate,sheet=sheet)
+    else:
+        sheet = 'informationdb'
+        sql = "SELECT * FROM `{sheet}`.{tablename} WHERE" \
+              " `FDate` >= '{date}'".format(tablename = tablename,date = startdate,sheet=sheet)
+
     table = pd.read_sql(sql,con=engineReader)
     table.to_sql(tablename,con=engineLocal,if_exists='append',index=False)
     Mysql_CheckDate(mySqlDBLocal,tablename)
 
 
+
 if __name__ == '__main__':
+    """
+    先Mysql_CheckDate数据库中最新的日期，然后按第二天更新至交易所最新数据日期
+    """
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-    # mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
-    #                            mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
-    # mySqlDBReaderInformation = ProMySqlDB(mySqlDBC_InformationDB_Name, mySqlDBC_User,
-    #                            mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    mySqlDBReader = ProMySqlDB(mySqlDBC_DataOIDB_Name, mySqlDBC_User,
+                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    mySqlDBReaderInformation = ProMySqlDB(mySqlDBC_InformationDB_Name, mySqlDBC_User,
+                               mySqlDBC_Passwd, mySqlDBC_Host, mySqlDBC_Port)
+    startdate = '2019-02-13'
+    enddate = '2019-03-04'
 
-    # Mysql_CheckDate(mySqlDBLocal, 'rankearning')
-    # MakeCompanyList(mySqlDBLocal, mySqlDBReader, Companys, '2019-01-04', '2019-01-21')
-    # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable, '2019-01-04')
-    MakeRankeEarningTables(mySqlDBLocal,'RB.SHFE','2019-01-02', '2019-01-21')
+    # UPdateTables('texchangefutureday',startdate)
+    # UPdateTables('texchangefuturerank',startdate)
+    UPdateTables('stfutureday',startdate)
+    #
+    # MakeCompanyList(mySqlDBLocal, mySqlDBReader, Companys, startdate, enddate)
+    # MakeEarningTables(mySqlDBLocal, mySqlDBReader, Companys, MultiplierTable, startdate)
+    # for i in ["AL.TEMP","BU.TEMP","CF.TEMP","CU.TEMP","HC.TEMP","I.TEMP","J.TEMP","JM.TEMP","L.TEMP"
+    #     ,"M.TEMP","P.TEMP","PP.TEMP","RB.TEMP","RU.TEMP","TA.TEMP","Y.TEMP","ZN.TEMP"]:
+    #     MakeRankeEarningTables(mySqlDBLocal,i,startdate, enddate)
+
+    # for table in ['companylist','earningtabletest','rankearning','stfutureday','texchangefutureday','texchangefuturerank']:
+    #     Mysql_CheckDate(mySqlDBLocal, table)
 
 
-    # mySqlDBReaderInformation.Close()
-    # mySqlDBReader.Close()
+    mySqlDBReaderInformation.Close()
+    mySqlDBReader.Close()
     mySqlDBLocal.Close()
 #

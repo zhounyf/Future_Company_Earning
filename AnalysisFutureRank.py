@@ -1,6 +1,13 @@
 from ProPackage.LangMySQL import *
 from ProPackage.ProMySqlDB import ProMySqlDB
 from ProPackage.ProConfig import *
+from EarningFutureRank import AnswerTest
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
+pd.set_option('mode.chained_assignment', None)
+from pyecharts import Kline
+from pyecharts import Scatter,Overlap,online
+
 
 
 def dateparse(date):
@@ -45,15 +52,15 @@ def get_common_observation(table,observeday, trainfirststart, trainfirstend, tes
         print("没有匹配")
 
 
-if __name__ == '__main__':
+def Kind(kind):
     mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
                               mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
-    table = Mysql_GetRankEarningAnswer(mySqlDBLocal)
+    table = Mysql_GetRankEarningAnswer(mySqlDBLocal,kind)
     dates = table[['训练开始日期', '训练结束日期', '测试开始日期', '测试结束日期']].drop_duplicates()
     dates = dates.sort_values(by=['训练开始日期', '测试开始日期'])
     dates.index = range(len(dates))
-    trainrow = 4
-    testrow = 7
+    trainrow = 3
+    testrow = 5
     trainfirststart = dateparse(dates.iloc[trainrow,0])
     trainfirstend = dateparse(dates.iloc[trainrow,1])
     testfirststart= dateparse(dates.iloc[trainrow,2])
@@ -77,3 +84,62 @@ if __name__ == '__main__':
         Ans = pd.concat(L)
         Ans['训练日期段'] = trainfirststart+'_'+trainfirstend+'_'+testfirststart+'_'+testfirstend
         Ans['测试日期段'] = trainlaststart + '_' + trainlastend + '_' + testlaststart + '_' + testlastend
+    mySqlDBLocal.Close()
+
+    return Ans
+
+
+def PactureGenerate(mySqlDB):
+
+    Dates = [['2017-01-01','2017-12-31'],['2018-01-01','2018-12-31']]
+    Kinds = ['HC']
+    for kind in Kinds:
+        for date in Dates:
+            start ,end= date
+            ans = Kind(kind)
+            anstable = AnswerTest(ans, mySqlDBLocal, kind, start, end)
+            anstable.to_csv("{name}{start}{end}.csv".format(name=kind,start=start,end=end), encoding='GBK')
+            # table = Mysql_GetBuyOIIndex(mySqlDB, kind, '2016-01-01', '2018-12-31')
+            #
+            # temptable = anstable.copy()
+            # temptable = temptable[temptable['盈利日期'] != '-1']
+            # temptable.index = pd.to_datetime(temptable['盈利日期'])
+            # temptable = temptable.sort_index()
+            # table = table.join(temptable['总盈亏'])
+            # table = table.fillna(0)
+            # table['累计总盈亏'] = table['总盈亏'].cumsum()
+            year = start[:4]
+            # newtable = table[year]
+            # ax = newtable['累计总盈亏'].plot(title='{name}-{start}年开仓然后持有至到期天之后的'
+            #                                 '资金曲线'.format(name=kind,start = year), grid=True)
+            # ax.get_figure().savefig("./image/{name}-{start}-{end}.png".format(name=kind,start=start,end=end))
+            # ax.cla()
+            #
+            # x = newtable['日期'].values
+            # y = newtable[['开盘价', '收盘价', '最低价', '最高价']].values
+            # x2 = temptable['日期'].values
+            # y2 = [newtable[newtable['日期'] == day]['最高价'].values * 1.02 for day in x2]
+            # kline = Kline("{name}指数".format(name=kind))
+            # kline.add("{name}{year}日线".format(name=kind,year=year), x, y, is_datazoom_show=True)
+            # scatter = Scatter()
+            # scatter.add("开仓信号", x2, y2, is_datazoom_show=True)
+            # overlap = Overlap()
+            # overlap.add(kline)
+            # overlap.add(scatter)
+            # overlap.render("./image/{name}{year}开仓信号.html".format(name=kind,year=year))
+            # newtable.to_csv("./doc/{name}table{year}.csv".format(name=kind,year=year),encoding='GBK')
+            # print("交易次数： "+ str(len(temptable)))
+            print("{name}{year}完成计算".format(name=kind,year=year))
+
+
+
+if __name__ == '__main__':
+    # print(len(Kind('I')))
+    mySqlDBLocal = ProMySqlDB(mySqlDBC_EARNINGDB_Name, mySqlDBC_UserLocal,
+                              mySqlDBC_Passwd, mySqlDBC_HostLocal, mySqlDBC_Port)
+    Ans = Kind("AP")
+    # anstable = AnswerTest(Ans, mySqlDBLocal, "RB",'2017-01-01','2017-12-31')
+    # anstable.to_csv("RB2017-01-01_2017-12-31.csv",encoding='GBK')
+    # from EarningFutureRank import AnswerTest
+    #
+    # AnswerTest(Ans, mySqlDBLocal, 'I.DCE', '2019-01-01', '2019-01-21')

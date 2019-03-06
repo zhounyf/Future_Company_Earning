@@ -4,10 +4,9 @@ Created on Tue Oct 23 09:35:51 2018
 
 @author: zhoun
 """
-import pandas as pd
+from sqlalchemy import create_engine
 from ProPackage.ProConfig import *
 import re
-import os
 
 
 
@@ -186,7 +185,7 @@ def MySql_BatchInsertRankEarningAnswer(mySqlDB, values, proLog=None, isLog=False
         if len(values) > 0:
             mySqlDB.Sqls("""
              INSERT INTO `rankearninganswer`(`区间左值`,`总盈亏`,`持有天数`,`交易次数`,`前多少排名`,`观察天数`,
-             `训练开始日期`,`训练结束日期`,`测试开始日期`,`测试结束日期`) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",values)
+             `训练开始日期`,`训练结束日期`,`测试开始日期`,`测试结束日期`,`品种`) values(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",values)
             if (isLog and proLog != None):
                 proLog.Log('Table rankearninganswer BatchInsert %d Successfully ' % len(values))
         else:
@@ -604,15 +603,15 @@ def Mysql_GetBuyOIIndex(mySqlDB, contractname, start, end):
     :return:
     """
     contractname2 = contractname.split('.')[0] + '9999'
-    sql = 'SELECT `FTradeDay`,`FOpen`,`FHigh`,`FLow`,`FClose`,`FOpenInst` FROM `stfutureday` WHERE `FRealContract` = ' \
+    sql = 'SELECT `FTradeDay`,`FOpen`,`FHigh`,`FLow`,`FClose`,`FSettle`,`FOpenInst` FROM `stfutureday` WHERE `FRealContract` = ' \
           '"{contractname}"  AND `FTradeDay` BETWEEN "{start}" AND "{end}" ORDER BY `FTradeDay`' \
           ''.format(contractname=contractname2, start=start, end=end)
     results = mySqlDB.GetResults(sql)
     ans = pd.DataFrame(list(results))
-    ans.columns = ['日期', '开盘价', '最高价', '最低价', '收盘价', '持买仓量']
+    ans.columns = ['日期', '开盘价', '最高价', '最低价', '收盘价','结算价' ,'持买仓量']
     ans.index = pd.to_datetime(ans['日期'])
-    ans[['开盘价', '最高价', '最低价', '收盘价', '持买仓量']] = \
-        ans[['开盘价', '最高价', '最低价', '收盘价', '持买仓量']].applymap(lambda x: round(x))
+    ans[['开盘价', '最高价', '最低价', '收盘价','结算价', '持买仓量']] = \
+        ans[['开盘价', '最高价', '最低价', '收盘价','结算价', '持买仓量']].applymap(lambda x: round(x))
     ans.insert(0, '期货品种', contractname.split('.')[0])
     ans['日期'] = [i.strftime("%Y-%m-%d") for i in ans['日期']]
     return ans
@@ -627,21 +626,25 @@ def Mysql_GetRankLimit(mySqlDB,contractname,start,end,limit):
     :return:
     """
     sql = 'SELECT `期货品种`,`日期`,`开盘价`,`最高价`,`最低价`,`收盘价`,`合约持仓量`,{limit} FROM `rankearning` ' \
-          'WHERE `日期` BETWEEN "{start}" AND "{end}" ORDER BY `日期` ASC'.format(limit=limit, start=start, end=end)
+          'WHERE `日期` BETWEEN "{start}" AND "{end}" AND `期货品种` = "{name}" ORDER BY `日期` ' \
+          'ASC'.format(limit=limit, start=start, end=end,name=contractname)
     results = mySqlDB.GetResults(sql)
-    ans = pd.DataFrame(list(results))
-    ans.columns = ['期货品种','日期','开盘价','最高价','最低价','收盘价','合约持仓量',limit]
-    ans['日期'] = [pd.datetime.strftime(x, '%Y-%m-%d') for x in ans['日期']]
-    ans.index = pd.to_datetime(ans['日期'])
-    return ans
+    if len(results)>0:
+        ans = pd.DataFrame(list(results))
+        ans.columns = ['期货品种','日期','开盘价','最高价','最低价','收盘价','合约持仓量',limit]
+        ans['日期'] = [pd.datetime.strftime(x, '%Y-%m-%d') for x in ans['日期']]
+        ans.index = pd.to_datetime(ans['日期'])
+        return ans
+    else:
+        return None
 
 
-def Mysql_GetRankEarningAnswer(mySqlDB):
-    sql = 'SELECT * FROM `rankearninganswer` '
+def Mysql_GetRankEarningAnswer(mySqlDB,kind):
+    sql = 'SELECT * FROM `rankearninganswer` where `品种` = "{kind}"'.format(kind=kind)
     results = mySqlDB.GetResults(sql)
     ans = pd.DataFrame(list(results))
     ans.columns = ["区间左值","总盈亏","持有天数","交易次数","前多少排名",
-                   "观察天数","训练开始日期","训练结束日期","测试开始日期","测试结束日期"]
+                   "观察天数","训练开始日期","训练结束日期","测试开始日期","测试结束日期","品种"]
     return ans
 
 
@@ -660,10 +663,43 @@ def Mysql_CopyData(mySqlDB,tablename,start):
     return results
 
 
-from sqlalchemy import create_engine
+def Mysql_GetOneCompanyRank(mySqlDB,contractname,company,start,end):
+    """
+    提取某期货公司当日在该品种所有合约上的持仓量合计
+    :param mySqlDB: localhost
+    :param contractname: RB.SHFE
+    :return:
+    """
+    contractname2 = contractname.split('.')[0] + '9999'
+    sql = "SELECT `FDate`,`FNumber` FROM `texchangefuturerank` WHERE `FDate`  BETWEEN '{start}' AND '{end}' AND `FParticipantABBR`" \
+          " = '{company}' AND `FType` = '持买量' AND FRealContract = '{name}'".format(start=start,end=end,
+                                                                                   company=company,name=contractname2)
+    results = mySqlDB.GetResults(sql)
+    ans = pd.DataFrame(list(results))
+    ans.columns = ['日期','持买仓量']
+    ans.index = pd.to_datetime(ans['日期'])
+    temp = Mysql_GetRankLimit(mySqlDB, contractname,start,end, 'limit1')
+    temp['limit1'] = ans['持买仓量']
+    return temp
 
-def getEnging(db,user,password,host,port):
+def Mysql_GetTestDateGroup(mySqlDB):
+    sql = "SELECT DISTINCT CONCAT(`训练开始日期`,' ',`训练结束日期`,' ',`测试开始日期`,' ',`测试结束日期`) AS t FROM `rankearninganswer` ORDER BY t"
+    results = mySqlDB.GetResults(sql)
+    ans = pd.DataFrame(list(results))
+    ans.columns = ['日期组合']
+    return ans
+
+
+
+
+
+
+
+
+def getEnging(db,user,password,host,port,sql):
     mysqlalchemy = 'mysql+pymysql://{user}:{password}@{host}:{port}/{db}?charset=' \
                    'utf8'.format(user=user,password=password,host=host,port=port,db=db)
     engine = create_engine(mysqlalchemy)
-    return engine
+    with engine.connect():
+        table = pd.read_sql(sql, con=engine.connect())
+    return table
